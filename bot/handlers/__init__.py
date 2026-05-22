@@ -6,11 +6,22 @@
 
 from aiogram import Router
 
-from bot.handlers import common, orders, broadcast, stats, users, sync_cmd
+from bot.handlers import (
+    broadcast,
+    common,
+    discounts,
+    orders,
+    products,
+    stats,
+    sync_cmd,
+    users,
+)
 
 router = Router(name="root")
 router.include_router(common.router)
 router.include_router(orders.router)
+router.include_router(products.router)
+router.include_router(discounts.router)
 router.include_router(broadcast.router)
 router.include_router(stats.router)
 router.include_router(users.router)

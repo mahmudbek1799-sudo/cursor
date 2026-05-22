@@ -66,6 +66,63 @@ class BlockedUser:
     blocked_at: str
 
 
+@dataclass(slots=True)
+class Product:
+    """DTO товара мебельного магазина."""
+
+    id: int
+    sku: str
+    title: str
+    category: str
+    price: float
+    stock: int
+    description: str
+    is_active: int
+    updated_at: str
+
+    @property
+    def in_stock(self) -> bool:
+        return bool(self.is_active) and self.stock > 0
+
+
+@dataclass(slots=True)
+class Discount:
+    """DTO скидки. ``product_id is None`` означает глобальную скидку."""
+
+    id: int
+    product_id: Optional[int]
+    kind: str       # 'percent' | 'fixed'
+    value: float
+    valid_from: Optional[str]
+    valid_to: Optional[str]
+    active: int
+    created_at: str
+
+    @property
+    def label(self) -> str:
+        if self.kind == "percent":
+            return f"-{self.value:g}%"
+        return f"-{self.value:,.0f} ₽".replace(",", " ")
+
+
+def apply_discount(price: float, discount: Optional["Discount"]) -> float:
+    """Применить скидку к цене (процентную или фиксированную).
+
+    Никогда не возвращает отрицательное значение: если фиксированная
+    скидка больше цены — возвращается 0.
+    """
+
+    if discount is None:
+        return round(price, 2)
+    if discount.kind == "percent":
+        result = price * (1 - float(discount.value) / 100.0)
+    elif discount.kind == "fixed":
+        result = price - float(discount.value)
+    else:
+        result = price
+    return round(max(0.0, result), 2)
+
+
 class Database:
     """Высокоуровневая обёртка над SQLite-соединением.
 
@@ -156,12 +213,50 @@ class Database:
                     category TEXT NOT NULL DEFAULT 'other',
                     price REAL NOT NULL DEFAULT 0,
                     stock INTEGER NOT NULL DEFAULT 0,
+                    description TEXT NOT NULL DEFAULT '',
+                    is_active INTEGER NOT NULL DEFAULT 1,
                     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
                 );
+
+                CREATE INDEX IF NOT EXISTS idx_products_category
+                    ON products(category);
+
+                CREATE TABLE IF NOT EXISTS discounts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    product_id INTEGER,
+                    kind TEXT NOT NULL CHECK(kind IN ('percent', 'fixed')),
+                    value REAL NOT NULL,
+                    valid_from TEXT,
+                    valid_to TEXT,
+                    active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    FOREIGN KEY (product_id) REFERENCES products(id)
+                        ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_discounts_product_id
+                    ON discounts(product_id);
+                CREATE INDEX IF NOT EXISTS idx_discounts_active
+                    ON discounts(active);
                 """
             )
+            # Совместимость со старыми схемами: добавим недостающие поля.
+            await self._safe_add_column(conn, "products",
+                                        "description", "TEXT NOT NULL DEFAULT ''")
+            await self._safe_add_column(conn, "products",
+                                        "is_active", "INTEGER NOT NULL DEFAULT 1")
             await conn.commit()
         logger.info("Схема БД успешно инициализирована (%s)", self._db_path)
+
+    @staticmethod
+    async def _safe_add_column(conn: aiosqlite.Connection,
+                               table: str, column: str, ddl: str) -> None:
+        """Добавить колонку, если она ещё не существует."""
+
+        cur = await conn.execute(f"PRAGMA table_info({table})")
+        existing = {row["name"] for row in await cur.fetchall()}
+        if column not in existing:
+            await conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
     # ------------------------------------------------------------------
     # Заказы
@@ -483,19 +578,33 @@ class Database:
         return [dict(r) for r in rows]
 
     # ------------------------------------------------------------------
-    # Каталог товаров (используется при синхронизации с сайтом магазина)
+    # Каталог товаров
     # ------------------------------------------------------------------
-    async def upsert_product(self, product: dict) -> None:
+    async def upsert_product(self, product: dict) -> bool:
+        """Создать или обновить товар по ``sku``.
+
+        Возвращает ``True``, если запись была создана впервые.
+        """
+
         async with self.connect() as conn:
+            cur = await conn.execute(
+                "SELECT id FROM products WHERE sku = ?",
+                (str(product["sku"]),),
+            )
+            row = await cur.fetchone()
+            is_new = row is None
             await conn.execute(
                 """
-                INSERT INTO products (sku, title, category, price, stock)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO products (sku, title, category, price, stock,
+                                      description, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(sku) DO UPDATE SET
                     title = excluded.title,
                     category = excluded.category,
                     price = excluded.price,
                     stock = excluded.stock,
+                    description = excluded.description,
+                    is_active = excluded.is_active,
                     updated_at = datetime('now')
                 """,
                 (
@@ -504,9 +613,208 @@ class Database:
                     product.get("category", "other"),
                     float(product.get("price", 0) or 0),
                     int(product.get("stock", 0) or 0),
+                    product.get("description", ""),
+                    int(product.get("is_active", 1)),
                 ),
             )
             await conn.commit()
+            return is_new
+
+    async def get_product(self, product_id: int) -> Optional[Product]:
+        async with self.connect() as conn:
+            cur = await conn.execute(
+                "SELECT * FROM products WHERE id = ?",
+                (product_id,),
+            )
+            row = await cur.fetchone()
+        return Product(**dict(row)) if row else None
+
+    async def get_product_by_sku(self, sku: str) -> Optional[Product]:
+        async with self.connect() as conn:
+            cur = await conn.execute(
+                "SELECT * FROM products WHERE sku = ?",
+                (sku,),
+            )
+            row = await cur.fetchone()
+        return Product(**dict(row)) if row else None
+
+    async def list_products(
+        self,
+        category: Optional[str] = None,
+        only_active: bool = False,
+        limit: int = 30,
+        offset: int = 0,
+    ) -> List[Product]:
+        query = "SELECT * FROM products WHERE 1=1"
+        params: list = []
+        if category:
+            query += " AND category = ?"
+            params.append(category)
+        if only_active:
+            query += " AND is_active = 1"
+        query += " ORDER BY category, title LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        async with self.connect() as conn:
+            cur = await conn.execute(query, params)
+            rows = await cur.fetchall()
+        return [Product(**dict(r)) for r in rows]
+
+    async def count_products(self, category: Optional[str] = None,
+                             only_active: bool = False) -> int:
+        query = "SELECT COUNT(*) AS cnt FROM products WHERE 1=1"
+        params: list = []
+        if category:
+            query += " AND category = ?"
+            params.append(category)
+        if only_active:
+            query += " AND is_active = 1"
+        async with self.connect() as conn:
+            cur = await conn.execute(query, params)
+            row = await cur.fetchone()
+        return int(row["cnt"]) if row else 0
+
+    async def list_categories(self) -> List[str]:
+        async with self.connect() as conn:
+            cur = await conn.execute(
+                "SELECT DISTINCT category FROM products ORDER BY category"
+            )
+            rows = await cur.fetchall()
+        return [r["category"] for r in rows]
+
+    async def update_product_price(self, product_id: int, new_price: float) -> bool:
+        if new_price < 0:
+            raise ValueError("Цена не может быть отрицательной")
+        async with self.connect() as conn:
+            cur = await conn.execute(
+                """
+                UPDATE products SET price = ?, updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (float(new_price), product_id),
+            )
+            await conn.commit()
+            return cur.rowcount > 0
+
+    async def update_product_stock(self, product_id: int, new_stock: int) -> bool:
+        if new_stock < 0:
+            raise ValueError("Остаток не может быть отрицательным")
+        async with self.connect() as conn:
+            cur = await conn.execute(
+                """
+                UPDATE products SET stock = ?, updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (int(new_stock), product_id),
+            )
+            await conn.commit()
+            return cur.rowcount > 0
+
+    async def set_product_active(self, product_id: int, is_active: bool) -> bool:
+        async with self.connect() as conn:
+            cur = await conn.execute(
+                """
+                UPDATE products SET is_active = ?, updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (1 if is_active else 0, product_id),
+            )
+            await conn.commit()
+            return cur.rowcount > 0
+
+    async def delete_product(self, product_id: int) -> bool:
+        async with self.connect() as conn:
+            cur = await conn.execute(
+                "DELETE FROM products WHERE id = ?",
+                (product_id,),
+            )
+            await conn.commit()
+            return cur.rowcount > 0
+
+    # ------------------------------------------------------------------
+    # Скидки
+    # ------------------------------------------------------------------
+    async def add_discount(
+        self,
+        kind: str,
+        value: float,
+        product_id: Optional[int] = None,
+        valid_from: Optional[str] = None,
+        valid_to: Optional[str] = None,
+    ) -> int:
+        if kind not in ("percent", "fixed"):
+            raise ValueError("kind должен быть 'percent' или 'fixed'")
+        if value <= 0:
+            raise ValueError("Значение скидки должно быть положительным")
+        if kind == "percent" and value > 100:
+            raise ValueError("Процентная скидка не может быть больше 100")
+        async with self.connect() as conn:
+            cur = await conn.execute(
+                """
+                INSERT INTO discounts
+                    (product_id, kind, value, valid_from, valid_to, active)
+                VALUES (?, ?, ?, ?, ?, 1)
+                """,
+                (product_id, kind, float(value), valid_from, valid_to),
+            )
+            await conn.commit()
+            return int(cur.lastrowid)
+
+    async def deactivate_discount(self, discount_id: int) -> bool:
+        async with self.connect() as conn:
+            cur = await conn.execute(
+                "UPDATE discounts SET active = 0 WHERE id = ?",
+                (discount_id,),
+            )
+            await conn.commit()
+            return cur.rowcount > 0
+
+    async def list_discounts(self, only_active: bool = True) -> List[Discount]:
+        query = "SELECT * FROM discounts"
+        if only_active:
+            query += (
+                " WHERE active = 1 AND (valid_to IS NULL OR valid_to >= datetime('now'))"
+            )
+        query += " ORDER BY id DESC"
+        async with self.connect() as conn:
+            cur = await conn.execute(query)
+            rows = await cur.fetchall()
+        return [Discount(**dict(r)) for r in rows]
+
+    async def get_active_discount_for_product(
+        self, product_id: int
+    ) -> Optional[Discount]:
+        """Вернёт лучшую активную скидку: персональную или глобальную.
+
+        Если для товара есть несколько активных скидок, выбирается та, что
+        даёт наибольшее снижение цены.
+        """
+
+        async with self.connect() as conn:
+            cur = await conn.execute(
+                """
+                SELECT * FROM discounts
+                WHERE active = 1
+                  AND (valid_from IS NULL OR valid_from <= datetime('now'))
+                  AND (valid_to   IS NULL OR valid_to   >= datetime('now'))
+                  AND (product_id = ? OR product_id IS NULL)
+                """,
+                (product_id,),
+            )
+            rows = await cur.fetchall()
+        if not rows:
+            return None
+        product = await self.get_product(product_id)
+        if product is None:
+            return Discount(**dict(rows[0]))
+        best: Optional[Discount] = None
+        best_price = product.price
+        for r in rows:
+            d = Discount(**dict(r))
+            new_price = apply_discount(product.price, d)
+            if new_price < best_price:
+                best_price = new_price
+                best = d
+        return best or Discount(**dict(rows[0]))
 
 
 _db: Optional[Database] = None

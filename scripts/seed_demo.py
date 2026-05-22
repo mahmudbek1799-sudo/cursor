@@ -42,6 +42,32 @@ async def main() -> None:
     await db.init_schema()
     random.seed(42)
 
+    categories = ["диван", "кровать", "стол", "шкаф", "кресло",
+                  "комод", "стул", "тумба"]
+    for idx, (title, price) in enumerate(CATALOG, start=1):
+        cat = "другое"
+        for c in categories:
+            if c in title.lower():
+                cat = c
+                break
+        sku = f"DEMO-{1000 + idx}"
+        await db.upsert_product({
+            "sku": sku,
+            "title": title,
+            "category": cat,
+            "price": float(price),
+            "stock": random.randint(3, 18),
+            "description": f"{title} — современная модель из коллекции 2026 года.",
+            "is_active": 1,
+        })
+
+    await db.add_discount(kind="percent", value=10, product_id=None,
+                          valid_to=(datetime.now() + timedelta(days=7))
+                          .isoformat(sep=" ", timespec="seconds"))
+    diván = await db.get_product_by_sku("DEMO-1001")
+    if diván is not None:
+        await db.add_discount(kind="fixed", value=5000, product_id=diván.id)
+
     now = datetime.now()
     for i in range(60):
         created = now - timedelta(days=random.randint(0, 13),

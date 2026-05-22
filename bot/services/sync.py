@@ -58,12 +58,35 @@ class OrderSyncService:
 
         return await self._sync_iteration()
 
+    async def sync_products(self) -> tuple[int, int]:
+        """Синхронизировать каталог товаров. Возвращает (создано, обновлено)."""
+
+        products = await self._api.fetch_products()
+        created = updated = 0
+        for ext in products:
+            is_new = await self._db.upsert_product(ext.as_dict())
+            if is_new:
+                created += 1
+            else:
+                updated += 1
+        if created or updated:
+            logger.info(
+                "Каталог синхронизирован: создано %s, обновлено %s",
+                created, updated,
+            )
+        return created, updated
+
     async def _run_forever(self) -> None:
+        product_sync_every = max(1, 600 // max(settings.sync_interval, 1))
+        iterations = 0
         while not self._stop.is_set():
             try:
                 await self._sync_iteration()
+                iterations += 1
+                if iterations % product_sync_every == 0:
+                    await self.sync_products()
             except Exception:  # noqa: BLE001
-                logger.exception("Ошибка в цикле синхронизации заказов")
+                logger.exception("Ошибка в цикле синхронизации")
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=settings.sync_interval)
             except asyncio.TimeoutError:

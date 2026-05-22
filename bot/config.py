@@ -44,6 +44,22 @@ class Settings(BaseSettings):
         default="demo_shop_token",
         description="Токен для авторизации запросов к API магазина",
     )
+    shop_source: str = Field(
+        default="mock",
+        description="Источник данных: 'mock' | 'api' | 'html'",
+    )
+    shop_catalog_url: str = Field(
+        default="",
+        description="URL страницы каталога для HTMLShopParser",
+    )
+    shop_orders_url: str = Field(
+        default="",
+        description="URL страницы списка заказов в админке для HTMLShopParser",
+    )
+    shop_cookies: str = Field(
+        default="",
+        description="Cookies для авторизации в админке (формат: key1=v1; key2=v2)",
+    )
     sync_interval: int = Field(
         default=60,
         ge=10,
@@ -65,6 +81,18 @@ class Settings(BaseSettings):
         """Проверить, входит ли Telegram-пользователь в список администраторов."""
 
         return user_id in self.admin_ids
+
+    def parsed_cookies(self) -> dict:
+        """Разобрать строку ``key1=v1; key2=v2`` в словарь cookies."""
+
+        result: dict = {}
+        for chunk in self.shop_cookies.split(";"):
+            chunk = chunk.strip()
+            if not chunk or "=" not in chunk:
+                continue
+            k, _, v = chunk.partition("=")
+            result[k.strip()] = v.strip()
+        return result
 
 
 settings = Settings()  # type: ignore[call-arg]

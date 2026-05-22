@@ -17,11 +17,45 @@ from bot.config import settings
 from bot.database.db import get_db
 from bot.handlers import router as root_router
 from bot.middlewares import AdminAccessMiddleware
-from bot.services.shop_api import MockShopAPI
+from bot.services.shop_api import (
+    BaseShopAPI,
+    HTMLShopParser,
+    MockShopAPI,
+    ShopAPIClient,
+)
 from bot.services.sync import OrderSyncService
 from bot.utils.logging_setup import setup_logging
 
 logger = logging.getLogger(__name__)
+
+
+def build_shop_source() -> BaseShopAPI:
+    """Выбрать источник данных по значению ``SHOP_SOURCE`` в .env.
+
+    Возможные значения:
+    * ``mock`` (по умолчанию) — генератор тестовых заказов;
+    * ``api``  — реальный REST-клиент (``SHOP_API_URL`` + ``SHOP_API_TOKEN``);
+    * ``html`` — парсинг HTML-страниц без API
+                (``SHOP_CATALOG_URL`` и опц. ``SHOP_ORDERS_URL``).
+    """
+
+    source = settings.shop_source.lower()
+    if source == "api":
+        logger.info("Источник данных: REST API (%s)", settings.shop_api_url)
+        return ShopAPIClient(settings.shop_api_url, settings.shop_api_token)
+    if source == "html":
+        logger.info(
+            "Источник данных: HTML-парсинг (caталог=%s, заказы=%s)",
+            settings.shop_catalog_url or "—",
+            settings.shop_orders_url or "—",
+        )
+        return HTMLShopParser(
+            catalog_url=settings.shop_catalog_url,
+            orders_url=settings.shop_orders_url or None,
+            cookies=settings.parsed_cookies(),
+        )
+    logger.info("Источник данных: MockShopAPI (демо-режим)")
+    return MockShopAPI()
 
 
 async def on_startup(bot: Bot, sync_service: OrderSyncService) -> None:
@@ -55,8 +89,7 @@ async def main() -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
 
-    # Источник заказов: для демонстрации — mock, для прод — ShopAPIClient.
-    shop_api = MockShopAPI()
+    shop_api = build_shop_source()
     sync_service = OrderSyncService(bot=bot, db=db, api=shop_api)
 
     dp = Dispatcher(storage=MemoryStorage())

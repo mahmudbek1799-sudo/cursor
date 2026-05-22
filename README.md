@@ -28,19 +28,25 @@
 ├── bot/
 │   ├── config.py              # настройки из .env (Pydantic Settings)
 │   ├── main.py                # точка входа (asyncio + aiogram Dispatcher)
-│   ├── database/db.py         # асинхронный слой SQLite
-│   ├── keyboards/admin.py     # inline- и reply-клавиатуры
+│   ├── database/db.py         # асинхронный слой SQLite (orders, products,
+│   │                            discounts, clients, blocked_users, admin_actions)
+│   ├── keyboards/admin.py     # reply- и inline-клавиатуры
 │   ├── middlewares/access.py  # контроль доступа администратора
-│   ├── handlers/              # роутеры: common, orders, stats, users, broadcast, sync
+│   ├── handlers/              # common, orders, products, discounts,
+│   │                            stats, users, broadcast, sync_cmd
 │   ├── services/
-│   │   ├── shop_api.py        # клиент API сайта (+ MockShopAPI)
-│   │   ├── sync.py            # фоновая синхронизация заказов
+│   │   ├── shop_api.py        # ShopAPIClient (REST) + HTMLShopParser (без API)
+│   │   │                        + MockShopAPI (демо)
+│   │   ├── sync.py            # фоновая синхронизация заказов и каталога
 │   │   └── analytics.py       # дашборды на Matplotlib
-│   └── utils/                 # логирование, форматирование
+│   └── utils/                 # логирование, форматирование (orders + products)
 ├── scripts/
-│   ├── seed_demo.py           # наполнение БД демо-данными
-│   └── build_vkr.py           # сборка .docx ВКР по ГОСТ
-├── docs/                      # сюда сохраняется готовая ВКР (.docx)
+│   ├── seed_demo.py           # наполнение БД демо-данными (заказы, товары, скидки)
+│   ├── build_vkr.py           # сборка пояснительной записки ВКР по ГОСТ
+│   └── build_otchet.py        # сборка отчёта по проектно-технологической практике
+├── docs/
+│   ├── Gafurov_VKR.docx
+│   └── Gafurov_Otchet_PTP.docx
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -107,35 +113,80 @@ python scripts/seed_demo.py
 python scripts/build_vkr.py
 ```
 
+## Сборка отчёта по проектно-технологической практике
+
+Для сборки `docs/Gafurov_Otchet_PTP.docx` (типовой формат отчёта по ПТП ВоГУ):
+
+```bash
+python scripts/build_otchet.py
+```
+
 ## Команды бота
 
-| Команда                          | Назначение                                      |
-|----------------------------------|--------------------------------------------------|
-| `/start`                         | Главное меню                                    |
-| `/help`                          | Справка                                         |
-| `/orders [active|done|all|<статус>]` | Список заказов                              |
-| `/order <id>` или `/order_<id>`  | Карточка заказа                                  |
-| `/stats`                         | Сводная статистика                              |
-| `/dashboard`                     | График заказов за 7 дней                        |
-| `/sync`                          | Принудительная синхронизация с сайтом           |
-| `/block <id> [причина]`          | Заблокировать пользователя                      |
-| `/unblock <id>`                  | Разблокировать пользователя                     |
-| `/blocked`                       | Показать чёрный список                          |
-| `/send <id> <текст>`             | Личное сообщение клиенту                        |
-| `/send_all <текст>`              | Массовая рассылка                               |
-| `/log`                           | Журнал действий администратора                  |
+### Заказы
+| Команда | Назначение |
+|---------|------------|
+| `/orders [active|done|all|<статус>]` | Список заказов |
+| `/order <id>` или `/order_<id>` | Карточка заказа |
+| `/sync` | Принудительный приём заказов с сайта |
+| `/parse_site` | Парсинг каталога сайта без API |
+
+### Товары
+| Команда | Назначение |
+|---------|------------|
+| `/products` | Каталог товаров с пагинацией |
+| `/product <id|sku>` | Карточка товара |
+| `/add_product` | Мастер добавления товара (FSM) |
+| `/del_product <id|sku>` | Удалить товар |
+| `/price <id|sku> <цена>` | Изменить цену |
+
+### Скидки
+| Команда | Назначение |
+|---------|------------|
+| `/discounts` | Список активных скидок |
+| `/discount <sku|id|all> <percent|fixed> <значение> [дней]` | Создать скидку |
+
+Примеры:
+- `/discount all percent 10 7` — −10 % на весь каталог на 7 дней
+- `/discount SOFA-001 fixed 5000` — минус 5000 ₽ на конкретный диван
+
+### Клиенты и рассылка
+| Команда | Назначение |
+|---------|------------|
+| `/block <id> [причина]` | Добавить в чёрный список |
+| `/unblock <id>` | Снять блокировку |
+| `/blocked` | Чёрный список |
+| `/send <id> <текст>` | Личное сообщение |
+| `/send_all <текст>` | Массовая рассылка |
+
+### Аналитика и общие
+| Команда | Назначение |
+|---------|------------|
+| `/stats` | Сводная статистика |
+| `/dashboard` | График заказов за 7 дней |
+| `/log` | Журнал действий администратора |
+| `/start`, `/help` | Главное меню / справка |
 
 ## Интеграция с сайтом магазина
 
-В файле `bot/main.py` источник заказов задаётся одной строкой:
+Источник данных выбирается переменной окружения **`SHOP_SOURCE`**
+(`mock` | `api` | `html`):
 
-```python
-shop_api = MockShopAPI()           # для разработки/демонстрации
-# shop_api = ShopAPIClient(
-#     settings.shop_api_url,
-#     settings.shop_api_token,
-# )
+```ini
+# .env — выбор источника:
+SHOP_SOURCE=html            # парсинг сайта без API
+SHOP_CATALOG_URL=https://shop.example.com/catalog/mebel
+SHOP_ORDERS_URL=https://shop.example.com/admin/orders
+SHOP_COOKIES=PHPSESSID=abcd1234; admin_session=xyz   # авторизация в админке
 ```
+
+| Значение | Класс | Назначение |
+|----------|-------|------------|
+| `mock` (по умолчанию) | `MockShopAPI` | Генератор тестовых заказов и каталога для разработки и защиты ВКР |
+| `api` | `ShopAPIClient` | Реальный REST-клиент к API CMS магазина |
+| `html` | `HTMLShopParser` | Парсинг HTML-страниц каталога и админки без API |
+
+### Режим `api`
 
 `ShopAPIClient` ожидает REST-эндпоинт `GET /api/orders?status=new` с
 ответом вида:
@@ -156,10 +207,27 @@ shop_api = MockShopAPI()           # для разработки/демонст�
 }
 ```
 
-Если у магазина нет API, в том же модуле есть метод
-`ShopAPIClient.parse_html_orders`, который вытаскивает заказы из HTML
-страницы админки магазина при помощи BeautifulSoup4. Чтобы использовать
-его, нужно скачивать HTML через `aiohttp` и передавать в этот метод.
+### Режим `html` (без API)
+
+`HTMLShopParser` сам скачивает HTML-страницы каталога/админки и
+извлекает данные при помощи BeautifulSoup4. Селекторы по умолчанию
+рассчитаны на типовой шаблон интернет-магазина мебели (OpenCart/Bootstrap):
+
+```python
+DEFAULT_PRODUCT_SELECTORS = {
+    "card":  ".product-card, .product-item, .product-layout",
+    "title": ".product-title, .product-name, h3, h4",
+    "price": ".product-price, .price, .price-new",
+    "sku":   "[data-sku], .product-sku",
+    "stock": ".stock, .availability",
+}
+```
+
+Селекторы можно переопределить через конструктор `HTMLShopParser`.
+Авторизация в админке — через cookies (`SHOP_COOKIES`).
+
+Команда `/parse_site` запускает разовый парсинг каталога и обновляет
+таблицу `products` (UPSERT по `sku`).
 
 ## Безопасность
 

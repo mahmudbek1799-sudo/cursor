@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from docx import Document
-from docx.enum.section import WD_SECTION
+from docx.enum.section import WD_SECTION_START
 from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
@@ -12,38 +12,147 @@ from docx.shared import Cm, Mm, Pt
 
 
 OUT_DIR = Path("docs")
-OUT_FILE = OUT_DIR / "VKR_Khudoykulzoda_Sh_M_proekt_zavoda_maslo_pahta.docx"
+OUT_FILE = OUT_DIR / "VKR_Khudoykulzoda_Sh_M_proekt_zavoda_maslo_pahta_STO_2022.docx"
 
 
 def fmt(value: float, digits: int = 1) -> str:
     return f"{value:,.{digits}f}".replace(",", " ").replace(".", ",")
 
 
-def set_cell_text(cell, text: str, bold: bool = False, align=WD_ALIGN_PARAGRAPH.CENTER, size: int = 12):
-    cell.text = ""
-    paragraph = cell.paragraphs[0]
-    paragraph.alignment = align
-    paragraph.paragraph_format.first_line_indent = Cm(0)
-    paragraph.paragraph_format.line_spacing = 1.0
-    run = paragraph.add_run(str(text))
-    run.bold = bold
+def rub(value: float) -> str:
+    return fmt(value, 2)
+
+
+def add_widow_control(paragraph):
+    p_pr = paragraph._p.get_or_add_pPr()
+    if p_pr.find(qn("w:widowControl")) is None:
+        p_pr.append(OxmlElement("w:widowControl"))
+
+
+def set_paragraph_format(paragraph, first_line: bool = True, line_spacing: float = 1.5):
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    paragraph.paragraph_format.left_indent = Cm(0)
+    paragraph.paragraph_format.right_indent = Cm(0)
+    paragraph.paragraph_format.first_line_indent = Cm(1.25) if first_line else Cm(0)
+    paragraph.paragraph_format.space_before = Pt(0)
+    paragraph.paragraph_format.space_after = Pt(0)
+    paragraph.paragraph_format.line_spacing = line_spacing
+    add_widow_control(paragraph)
+
+
+def set_run(run, size: int = 14, bold: bool = False, italic: bool = False):
     run.font.name = "Times New Roman"
+    run._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
     run.font.size = Pt(size)
-    cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+    run.bold = bold
+    run.italic = italic
+
+
+def configure_section(section, *, footer: bool = True, start_page: int | None = None):
+    section.page_height = Mm(297)
+    section.page_width = Mm(210)
+    section.top_margin = Mm(20)
+    section.bottom_margin = Mm(20)
+    section.left_margin = Mm(30)
+    section.right_margin = Mm(15)
+    section.different_first_page_header_footer = True
+    if start_page is not None:
+        sect_pr = section._sectPr
+        pg_num = sect_pr.find(qn("w:pgNumType"))
+        if pg_num is None:
+            pg_num = OxmlElement("w:pgNumType")
+            sect_pr.append(pg_num)
+        pg_num.set(qn("w:start"), str(start_page))
+    if footer:
+        add_page_number(section)
+
+
+def add_page_number(section):
+    footer = section.footer
+    paragraph = footer.paragraphs[0]
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    paragraph.paragraph_format.first_line_indent = Cm(0)
+    run = paragraph.add_run()
+    fld_char_begin = OxmlElement("w:fldChar")
+    fld_char_begin.set(qn("w:fldCharType"), "begin")
+    instr_text = OxmlElement("w:instrText")
+    instr_text.set(qn("xml:space"), "preserve")
+    instr_text.text = "PAGE"
+    fld_char_end = OxmlElement("w:fldChar")
+    fld_char_end.set(qn("w:fldCharType"), "end")
+    run._r.append(fld_char_begin)
+    run._r.append(instr_text)
+    run._r.append(fld_char_end)
+    set_run(run, 12)
+
+
+def set_defaults(doc: Document):
+    configure_section(doc.sections[0], footer=False)
+    styles = doc.styles
+    normal = styles["Normal"]
+    normal.font.name = "Times New Roman"
+    normal._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
+    normal.font.size = Pt(14)
+    normal.paragraph_format.first_line_indent = Cm(1.25)
+    normal.paragraph_format.line_spacing = 1.5
+    normal.paragraph_format.space_after = Pt(0)
+    normal.paragraph_format.space_before = Pt(0)
+
+    for name in ("Heading 1", "Heading 2", "Heading 3"):
+        style = styles[name]
+        style.font.name = "Times New Roman"
+        style._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
+        style.font.size = Pt(14)
+        style.font.bold = True
+        style.paragraph_format.space_before = Pt(0)
+        style.paragraph_format.space_after = Pt(0)
+        style.paragraph_format.line_spacing = 1.5
+        style.paragraph_format.first_line_indent = Cm(0 if name == "Heading 1" else 1.25)
+    styles["Heading 1"].paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    styles["Heading 2"].paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    styles["Heading 3"].paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+
+def paragraph(doc: Document, text: str = "", *, align=WD_ALIGN_PARAGRAPH.JUSTIFY, first_line: bool = True, bold: bool = False, size: int = 14, spacing: float = 1.5):
+    par = doc.add_paragraph()
+    set_paragraph_format(par, first_line=first_line, line_spacing=spacing)
+    par.alignment = align
+    run = par.add_run(text)
+    set_run(run, size=size, bold=bold)
+    return par
+
+
+def empty_line(doc: Document):
+    paragraph(doc, "", first_line=False)
+
+
+def add_heading(doc: Document, text: str, level: int):
+    if level == 1:
+        if doc.paragraphs and 'w:type="page"' not in doc.paragraphs[-1]._p.xml:
+            doc.add_page_break()
+    par = doc.add_heading(text, level=level)
+    set_paragraph_format(par, first_line=(level != 1), line_spacing=1.5)
+    par.alignment = WD_ALIGN_PARAGRAPH.CENTER if level == 1 else WD_ALIGN_PARAGRAPH.LEFT
+    for run in par.runs:
+        set_run(run, bold=True)
+    empty_line(doc)
+    return par
+
+
+def add_struct_heading(doc: Document, text: str):
+    add_heading(doc, text.upper(), 1)
 
 
 def set_table_borders(table):
-    tbl = table._tbl
-    tbl_pr = tbl.tblPr
+    tbl_pr = table._tbl.tblPr
     borders = tbl_pr.first_child_found_in("w:tblBorders")
     if borders is None:
         borders = OxmlElement("w:tblBorders")
         tbl_pr.append(borders)
     for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
-        tag = "w:" + edge
-        element = borders.find(qn(tag))
+        element = borders.find(qn(f"w:{edge}"))
         if element is None:
-            element = OxmlElement(tag)
+            element = OxmlElement(f"w:{edge}")
             borders.append(element)
         element.set(qn("w:val"), "single")
         element.set(qn("w:sz"), "8")
@@ -51,7 +160,37 @@ def set_table_borders(table):
         element.set(qn("w:color"), "000000")
 
 
-def add_field(paragraph, instruction: str):
+def set_cell(cell, text: str, *, bold: bool = False, align=WD_ALIGN_PARAGRAPH.CENTER, size: int = 12):
+    cell.text = ""
+    par = cell.paragraphs[0]
+    set_paragraph_format(par, first_line=False, line_spacing=1.0)
+    par.alignment = align
+    run = par.add_run(str(text))
+    set_run(run, size=size, bold=bold)
+    cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+
+
+def add_table(doc: Document, title: str, headers: list[str], rows: list[list[str]], *, widths: list[float] | None = None):
+    paragraph(doc, title, first_line=False, spacing=1.0)
+    tbl = doc.add_table(rows=1, cols=len(headers))
+    tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+    tbl.autofit = True
+    set_table_borders(tbl)
+    for idx, header in enumerate(headers):
+        set_cell(tbl.rows[0].cells[idx], header, bold=True)
+        if widths:
+            tbl.rows[0].cells[idx].width = Cm(widths[idx])
+    for row in rows:
+        cells = tbl.add_row().cells
+        for idx, value in enumerate(row):
+            set_cell(cells[idx], str(value), align=WD_ALIGN_PARAGRAPH.LEFT if idx == 0 else WD_ALIGN_PARAGRAPH.CENTER)
+            if widths:
+                cells[idx].width = Cm(widths[idx])
+    empty_line(doc)
+    return tbl
+
+
+def add_field(paragraph, instruction: str, placeholder: str):
     run = paragraph.add_run()
     fld_char_begin = OxmlElement("w:fldChar")
     fld_char_begin.set(qn("w:fldCharType"), "begin")
@@ -65,908 +204,751 @@ def add_field(paragraph, instruction: str):
     run._r.append(fld_char_begin)
     run._r.append(instr_text)
     run._r.append(fld_char_separate)
-    paragraph.add_run("Обновите поле содержания в Microsoft Word: выделить содержание, F9.")
-    paragraph.runs[-1].font.name = "Times New Roman"
-    paragraph.runs[-1].font.size = Pt(14)
-    paragraph.runs[-1]._r.append(fld_char_end)
+    placeholder_run = paragraph.add_run(placeholder)
+    set_run(placeholder_run)
+    placeholder_run._r.append(fld_char_end)
 
 
-def add_page_number(section):
-    footer = section.footer
-    paragraph = footer.paragraphs[0]
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = paragraph.add_run()
-    fld_char_begin = OxmlElement("w:fldChar")
-    fld_char_begin.set(qn("w:fldCharType"), "begin")
-    instr_text = OxmlElement("w:instrText")
-    instr_text.set(qn("xml:space"), "preserve")
-    instr_text.text = "PAGE"
-    fld_char_end = OxmlElement("w:fldChar")
-    fld_char_end.set(qn("w:fldCharType"), "end")
-    run._r.append(fld_char_begin)
-    run._r.append(instr_text)
-    run._r.append(fld_char_end)
-    run.font.name = "Times New Roman"
-    run.font.size = Pt(12)
-
-
-def set_doc_defaults(doc: Document):
-    section = doc.sections[0]
-    section.top_margin = Mm(20)
-    section.bottom_margin = Mm(20)
-    section.left_margin = Mm(30)
-    section.right_margin = Mm(10)
-    section.different_first_page_header_footer = True
-    add_page_number(section)
-
-    styles = doc.styles
-    normal = styles["Normal"]
-    normal.font.name = "Times New Roman"
-    normal._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
-    normal.font.size = Pt(14)
-    normal.paragraph_format.first_line_indent = Cm(1.25)
-    normal.paragraph_format.line_spacing = 1.5
-    normal.paragraph_format.space_after = Pt(0)
-    normal.paragraph_format.space_before = Pt(0)
-
-    for style_name in ("Heading 1", "Heading 2", "Heading 3"):
-        style = styles[style_name]
-        style.font.name = "Times New Roman"
-        style._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
-        style.font.size = Pt(14)
-        style.font.bold = True
-        style.paragraph_format.line_spacing = 1.5
-        style.paragraph_format.space_after = Pt(0)
-        style.paragraph_format.space_before = Pt(0)
-        style.paragraph_format.first_line_indent = Cm(0)
-    styles["Heading 1"].paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    styles["Heading 1"].paragraph_format.page_break_before = False
-    styles["Heading 2"].paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    styles["Heading 3"].paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
-
-
-def p(doc: Document, text: str, align=WD_ALIGN_PARAGRAPH.JUSTIFY):
-    paragraph = doc.add_paragraph()
-    paragraph.alignment = align
-    paragraph.paragraph_format.first_line_indent = Cm(1.25)
-    paragraph.paragraph_format.line_spacing = 1.5
-    paragraph.paragraph_format.space_after = Pt(0)
-    run = paragraph.add_run(text)
-    run.font.name = "Times New Roman"
-    run.font.size = Pt(14)
-    return paragraph
-
-
-def small_p(doc: Document, text: str, align=WD_ALIGN_PARAGRAPH.JUSTIFY):
-    paragraph = doc.add_paragraph()
-    paragraph.alignment = align
-    paragraph.paragraph_format.first_line_indent = Cm(1.25)
-    paragraph.paragraph_format.line_spacing = 1.0
-    run = paragraph.add_run(text)
-    run.font.name = "Times New Roman"
-    run.font.size = Pt(12)
-    return paragraph
-
-
-def previous_paragraph_has_page_break(doc: Document) -> bool:
-    if not doc.paragraphs:
-        return False
-    return 'w:type="page"' in doc.paragraphs[-1]._p.xml
-
-
-def heading(doc: Document, text: str, level: int = 1):
-    if level == 1 and doc.paragraphs and not previous_paragraph_has_page_break(doc):
-        doc.add_page_break()
-    paragraph = doc.add_heading(text, level=level)
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER if level == 1 else WD_ALIGN_PARAGRAPH.LEFT
-    for run in paragraph.runs:
-        run.font.name = "Times New Roman"
-        run.font.size = Pt(14)
-        run.bold = True
-    return paragraph
-
-
-def table(doc: Document, title: str, headers: list[str], rows: list[list[str]], widths: list[float] | None = None):
-    title_p = doc.add_paragraph()
-    title_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    title_p.paragraph_format.first_line_indent = Cm(0)
-    title_p.paragraph_format.line_spacing = 1.5
-    run = title_p.add_run(title)
-    run.font.name = "Times New Roman"
-    run.font.size = Pt(14)
-
-    tbl = doc.add_table(rows=1, cols=len(headers))
+def add_formula(doc: Document, formula: str, number: str):
+    empty_line(doc)
+    tbl = doc.add_table(rows=1, cols=2)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     tbl.autofit = True
-    set_table_borders(tbl)
-    for idx, header in enumerate(headers):
-        set_cell_text(tbl.rows[0].cells[idx], header, bold=True, size=12)
-        if widths:
-            tbl.rows[0].cells[idx].width = Cm(widths[idx])
-    for row in rows:
-        cells = tbl.add_row().cells
-        for idx, value in enumerate(row):
-            align = WD_ALIGN_PARAGRAPH.LEFT if idx == 0 else WD_ALIGN_PARAGRAPH.CENTER
-            set_cell_text(cells[idx], str(value), align=align, size=12)
-            if widths:
-                cells[idx].width = Cm(widths[idx])
-    doc.add_paragraph()
-    return tbl
-
-
-def add_title_page(doc: Document):
-    lines = [
-        "Министерство сельского хозяйства Российской Федерации",
-        "федеральное государственное бюджетное образовательное учреждение высшего образования",
-        "«Вологодская государственная молочнохозяйственная академия имени Н.В. Верещагина»",
-        "Технологический факультет",
-        "Кафедра технологии молока и молочных продуктов",
-    ]
-    for line in lines:
-        paragraph = doc.add_paragraph()
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        paragraph.paragraph_format.first_line_indent = Cm(0)
-        run = paragraph.add_run(line)
-        run.font.name = "Times New Roman"
-        run.font.size = Pt(14)
-
-    doc.add_paragraph()
-    for text in [
-        "ВЫПУСКНАЯ КВАЛИФИКАЦИОННАЯ РАБОТА",
-        "на тему:",
-        "«Проект завода по производству масла и продуктов из пахты»",
-    ]:
-        paragraph = doc.add_paragraph()
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        paragraph.paragraph_format.first_line_indent = Cm(0)
-        run = paragraph.add_run(text)
-        run.font.name = "Times New Roman"
-        run.font.size = Pt(14)
-        run.bold = text == "ВЫПУСКНАЯ КВАЛИФИКАЦИОННАЯ РАБОТА"
-
-    doc.add_paragraph()
-    title_rows = [
-        ["Обучающийся", "Худойкулзода Шерали Мухаммади"],
-        ["Направление подготовки", "Технология молока и молочных продуктов"],
-        ["Руководитель", "доц. Куренкова Л.А."],
-        ["Консультант по оборудованию", "доц. Шохалов В.А."],
-        ["Консультант по организации труда", "ст. преп. Фатеева Н.В."],
-        ["Заведующий кафедрой", "Носкова В.И."],
-    ]
-    tbl = doc.add_table(rows=0, cols=2)
-    tbl.alignment = WD_TABLE_ALIGNMENT.RIGHT
-    for row in title_rows:
-        cells = tbl.add_row().cells
-        set_cell_text(cells[0], row[0], align=WD_ALIGN_PARAGRAPH.LEFT, size=14)
-        set_cell_text(cells[1], row[1] + " __________________", align=WD_ALIGN_PARAGRAPH.LEFT, size=14)
-
-    for _ in range(7):
-        doc.add_paragraph()
-    paragraph = doc.add_paragraph()
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    paragraph.paragraph_format.first_line_indent = Cm(0)
-    run = paragraph.add_run("Вологда, 2026")
-    run.font.name = "Times New Roman"
-    run.font.size = Pt(14)
-    doc.add_page_break()
-
-
-def add_abstract(doc: Document):
-    heading(doc, "РЕФЕРАТ", 1)
-    p(
-        doc,
-        "Выпускная квалификационная работа содержит проектное решение завода по переработке "
-        "60 000 кг коровьего молока в смену с выпуском сливочного масла и продуктов из пахты. "
-        "В работе выполнены технико-экономическое обоснование, продуктовый расчет, выбор "
-        "технологических режимов, расчет оборудования, производственный контроль, организация "
-        "труда, вопросы безопасности жизнедеятельности и технико-экономическая оценка проекта.",
-    )
-    p(
-        doc,
-        "Объект проектирования - молокоперерабатывающее предприятие, ориентированное на "
-        "комплексное использование молочного сырья. Предмет проектирования - технологические "
-        "линии получения масла крестьянского, масла десертного с кофе, пахты пастеризованной, "
-        "кисломолочного напитка из пахты с сахаром и напитка из пахты с ванилью.",
-    )
-    p(
-        doc,
-        "Расчетная часть основана на исходных данных задания: масса молока 60 000 кг, массовая "
-        "доля жира 3,8 %, массовая доля белка 3,2 %, плотность 1028 кг/м3. Проектные решения "
-        "приняты с учетом требований технических регламентов Таможенного союза, действующих "
-        "государственных стандартов, санитарных правил и норм технологического проектирования.",
-    )
-    p(
-        doc,
-        "Ключевые слова: сливочное масло, пахта, сепарирование, пастеризация, созревание сливок, "
-        "маслообразователь, кисломолочный напиток, производственный контроль, CIP-мойка, "
-        "технико-экономическая оценка.",
-    )
-
-
-def add_toc(doc: Document):
-    heading(doc, "СОДЕРЖАНИЕ", 1)
-    paragraph = doc.add_paragraph()
-    paragraph.paragraph_format.first_line_indent = Cm(0)
-    add_field(paragraph, 'TOC \\o "1-3" \\h \\z \\u')
-    doc.add_page_break()
+    set_cell(tbl.rows[0].cells[0], formula, align=WD_ALIGN_PARAGRAPH.CENTER, size=14)
+    set_cell(tbl.rows[0].cells[1], number, align=WD_ALIGN_PARAGRAPH.RIGHT, size=14)
+    tbl.rows[0].cells[0].width = Cm(13)
+    tbl.rows[0].cells[1].width = Cm(2)
+    empty_line(doc)
 
 
 def calculations():
     milk = 60000.0
-    fat = 3.8
-    protein = 3.2
+    milk_fat = 3.8
+    milk_protein = 3.2
     density = 1028.0
-    skim_fat = 0.05
     cream_fat = 35.0
-    cream = milk * (fat - skim_fat) / (cream_fat - skim_fat)
+    skim_fat = 0.05
+    cream = milk * (milk_fat - skim_fat) / (cream_fat - skim_fat)
     skim = milk - cream
+    milk_fat_mass = milk * milk_fat / 100
     cream_fat_mass = cream * cream_fat / 100
     skim_fat_mass = skim * skim_fat / 100
     retained_fat = cream_fat_mass * 0.995
-    fat_peasant = retained_fat * 0.75
-    fat_dessert = retained_fat * 0.25
-    peasant = fat_peasant / 0.725
-    dessert = fat_dessert / 0.52
-    total_butter = peasant + dessert
-    buttermilk = cream - total_butter - cream * 0.005
-    buttermilk_available = buttermilk * 0.985
-    buttermilk_pasteurized = buttermilk_available * 0.50
-    fermented_base = buttermilk_available * 0.30
+    peasant_fat_mass = retained_fat * 0.75
+    dessert_fat_mass = retained_fat * 0.25
+    peasant = peasant_fat_mass / 0.725
+    dessert = dessert_fat_mass / 0.52
+    butter_total = peasant + dessert
+    cream_loss = cream * 0.005
+    buttermilk_raw = cream - butter_total - cream_loss
+    buttermilk = buttermilk_raw * 0.985
+    pasteurized_bm = buttermilk * 0.50
+    fermented_base = buttermilk * 0.30
     fermented_sugar = fermented_base * 0.055
-    fermented = fermented_base + fermented_sugar
-    vanilla_base = buttermilk_available * 0.20
+    fermented_starter = fermented_base * 0.03
+    fermented = fermented_base + fermented_sugar + fermented_starter
+    vanilla_base = buttermilk * 0.20
     vanilla_sugar = vanilla_base * 0.045
     vanilla_flavor = vanilla_base * 0.0008
     vanilla = vanilla_base + vanilla_sugar + vanilla_flavor
-    return {
-        "milk": milk,
-        "fat": fat,
-        "protein": protein,
-        "density": density,
-        "skim_fat": skim_fat,
-        "cream_fat": cream_fat,
-        "cream": cream,
-        "skim": skim,
-        "cream_fat_mass": cream_fat_mass,
-        "skim_fat_mass": skim_fat_mass,
-        "retained_fat": retained_fat,
-        "peasant": peasant,
-        "dessert": dessert,
-        "buttermilk": buttermilk,
-        "buttermilk_available": buttermilk_available,
-        "buttermilk_pasteurized": buttermilk_pasteurized,
-        "fermented_base": fermented_base,
-        "fermented_sugar": fermented_sugar,
-        "fermented": fermented,
-        "vanilla_base": vanilla_base,
-        "vanilla_sugar": vanilla_sugar,
-        "vanilla_flavor": vanilla_flavor,
-        "vanilla": vanilla,
-    }
+    work_days = 250
+    return locals()
+
+
+def add_title_page(doc: Document):
+    for line in (
+        "Министерство сельского хозяйства Российской Федерации",
+        "федеральное государственное бюджетное образовательное учреждение высшего образования",
+        "«Вологодская государственная молочнохозяйственная академия имени Н.В. Верещагина»",
+        "ТЕХНОЛОГИЧЕСКИЙ ФАКУЛЬТЕТ",
+        "КАФЕДРА ТЕХНОЛОГИИ МОЛОКА И МОЛОЧНЫХ ПРОДУКТОВ",
+    ):
+        paragraph(doc, line, align=WD_ALIGN_PARAGRAPH.CENTER, first_line=False, spacing=1.0)
+
+    for _ in range(2):
+        empty_line(doc)
+    paragraph(doc, "Допущен к защите", align=WD_ALIGN_PARAGRAPH.LEFT, first_line=False, spacing=1.0)
+    paragraph(doc, "Заведующий кафедрой,", align=WD_ALIGN_PARAGRAPH.LEFT, first_line=False, spacing=1.0)
+    paragraph(doc, "канд. техн. наук, доцент", align=WD_ALIGN_PARAGRAPH.LEFT, first_line=False, spacing=1.0)
+    paragraph(doc, "_____________ / Носкова В.И. /", align=WD_ALIGN_PARAGRAPH.LEFT, first_line=False, spacing=1.0)
+    paragraph(doc, "«_____» ______________ 2026 г.", align=WD_ALIGN_PARAGRAPH.LEFT, first_line=False, spacing=1.0)
+    empty_line(doc)
+    paragraph(doc, "ВЫПУСКНАЯ КВАЛИФИКАЦИОННАЯ РАБОТА", align=WD_ALIGN_PARAGRAPH.CENTER, first_line=False, bold=True)
+    paragraph(doc, "Проект завода по производству масла и продуктов из пахты", align=WD_ALIGN_PARAGRAPH.CENTER, first_line=False, bold=True)
+    empty_line(doc)
+    paragraph(doc, "направление подготовки 19.03.03 - Продукты питания животного происхождения", first_line=False)
+    paragraph(doc, "профиль подготовки - Технология молока и молочных продуктов", first_line=False)
+    empty_line(doc)
+    rows = [
+        ["Студент", "_____________", "Худойкулзода Шерали Мухаммади"],
+        ["Руководитель ВКР\nканд. техн. наук, доцент", "_____________", "Куренкова Л.А."],
+        ["Консультант по экономическому разделу\nдоцент", "_____________", "Куренкова Л.А."],
+        ["Консультант по разделу\n«Технологическое оборудование»\nдоцент", "_____________", "Шохалов В.А."],
+        ["Консультант по разделу\n«Организация труда»\nст. преподаватель", "_____________", "Фатеева Н.В."],
+        ["Консультант по разделу\n«Безопасность жизнедеятельности»\nдоцент", "_____________", "Куренкова Л.А."],
+        ["Нормоконтроль", "_____________", "________________"],
+    ]
+    tbl = doc.add_table(rows=0, cols=3)
+    tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+    for row in rows:
+        cells = tbl.add_row().cells
+        for idx, value in enumerate(row):
+            set_cell(cells[idx], value, align=WD_ALIGN_PARAGRAPH.LEFT if idx != 1 else WD_ALIGN_PARAGRAPH.CENTER, size=12)
+    for _ in range(3):
+        empty_line(doc)
+    paragraph(doc, "Вологда-Молочное", align=WD_ALIGN_PARAGRAPH.CENTER, first_line=False)
+    paragraph(doc, "2026", align=WD_ALIGN_PARAGRAPH.CENTER, first_line=False)
+
+
+def add_assignment_and_calendar(doc: Document):
+    doc.add_section(WD_SECTION_START.NEW_PAGE)
+    configure_section(doc.sections[-1], footer=False)
+    for line in (
+        "Министерство сельского хозяйства Российской Федерации",
+        "федеральное государственное бюджетное образовательное учреждение высшего образования",
+        "«Вологодская государственная молочнохозяйственная академия имени Н.В. Верещагина»",
+        "ФАКУЛЬТЕТ ТЕХНОЛОГИЧЕСКИЙ",
+        "КАФЕДРА ТЕХНОЛОГИИ МОЛОКА И МОЛОЧНЫХ ПРОДУКТОВ",
+    ):
+        paragraph(doc, line, align=WD_ALIGN_PARAGRAPH.CENTER, first_line=False, spacing=1.0, size=12)
+    paragraph(doc, "УТВЕРЖДАЮ", align=WD_ALIGN_PARAGRAPH.RIGHT, first_line=False, spacing=1.0)
+    paragraph(doc, "Заведующий кафедрой", align=WD_ALIGN_PARAGRAPH.RIGHT, first_line=False, spacing=1.0)
+    paragraph(doc, "_____________ / Носкова В.И. /", align=WD_ALIGN_PARAGRAPH.RIGHT, first_line=False, spacing=1.0)
+    paragraph(doc, "«_____» ______________ 2026 г.", align=WD_ALIGN_PARAGRAPH.RIGHT, first_line=False, spacing=1.0)
+    paragraph(doc, "ЗАДАНИЕ", align=WD_ALIGN_PARAGRAPH.CENTER, first_line=False, bold=True)
+    paragraph(doc, "на выполнение выпускной квалификационной работы студенту Худойкулзода Шерали Мухаммади", first_line=False)
+    tasks = [
+        ("1. Тема выпускной квалификационной работы", "Проект завода по производству масла и продуктов из пахты."),
+        ("2. Срок сдачи студентом законченной работы на кафедру", "15 мая 2026 г."),
+        ("3. Исходные данные к выпускной квалификационной работе", "Квалификационную работу выполнить в соответствии с нормами технологического проектирования. Ассортимент: масло крестьянское, масло десертное с кофе, пахта пастеризованная, кисломолочный напиток из пахты с сахаром, напиток из пахты с ванилью. Масса молока - 60 000 кг; массовая доля жира - 3,8 %; массовая доля белка - 3,2 %; плотность молока - 1028 кг/м3."),
+        ("4. Перечень обязательных разделов", "экономическое обоснование; продуктовый расчет; выбор и обоснование технологических режимов; расчет и подбор технологического оборудования; организация труда; безопасность жизнедеятельности; технико-экономическая оценка проекта."),
+        ("5. Перечень графического материала формата А1", "схема оборудования; график производственных процессов; план завода; схема санитарной обработки линии по производству сливочного масла; экономический чертеж."),
+        ("6. Консультанты", "экономическое обоснование и технологическая часть - доц. Куренкова Л.А.; расчет и подбор технологического оборудования - доц. Шохалов В.А.; организация труда и технико-экономическая оценка - ст. преп. Фатеева Н.В.; безопасность жизнедеятельности - доц. Куренкова Л.А."),
+        ("7. Дата выдачи задания", "29.09.2025."),
+    ]
+    for name, value in tasks:
+        paragraph(doc, f"{name}: {value}", first_line=False, spacing=1.0)
+    empty_line(doc)
+    paragraph(doc, "Руководитель ______________ /Куренкова Л.А./", first_line=False, spacing=1.0)
+    paragraph(doc, "Задание принял к исполнению студент ______________ /Худойкулзода Ш.М./", first_line=False, spacing=1.0)
+    paragraph(doc, "«30» сентября 2025 г.", first_line=False, spacing=1.0)
+
+    doc.add_page_break()
+    paragraph(doc, "КАЛЕНДАРНЫЙ ПЛАН-ГРАФИК", align=WD_ALIGN_PARAGRAPH.CENTER, first_line=False, bold=True)
+    paragraph(doc, "выполнения выпускной квалификационной работы студентом Худойкулзода Шерали Мухаммади", align=WD_ALIGN_PARAGRAPH.CENTER, first_line=False)
+    rows = [
+        ["Введение", "5", "01.11.2025"],
+        ["Технико-экономическое обоснование", "5", "10.12.2025"],
+        ["Продуктовый расчет и технологические схемы производства продуктов", "10", "01.12.2025"],
+        ["Технология молочных продуктов. Схема оборудования", "10", "30.12.2025"],
+        ["График производственных процессов", "10", "15.02.2026"],
+        ["Выбор и обоснование способов производства и технологических режимов", "10", "01.03.2026"],
+        ["Производственный контроль", "10", "10.03.2026"],
+        ["Подбор и расчет технологического оборудования", "5", "20.03.2026"],
+        ["Организация труда рабочих", "5", "20.04.2026"],
+        ["План завода с расстановкой оборудования", "10", "06.05.2026"],
+        ["Безопасность жизнедеятельности", "5", "11.05.2026"],
+        ["Технико-экономическая оценка проекта", "5", "15.05.2026"],
+        ["Выполнение листов графической части", "10", "18.05.2026"],
+        ["Оформление текстовой и графической части ВКР", "-", "21.05.2026"],
+        ["Проверка на заимствование", "-", "25.05.2026"],
+    ]
+    add_table(doc, "Таблица 1 – Календарный план-график выполнения ВКР", ["Наименование разделов работы", "Объем, %", "Плановая дата"], rows, widths=[9, 3, 4])
+    paragraph(doc, "Дата предзащиты ВКР «15» июня 2026 г.", first_line=False)
+    paragraph(doc, "Руководитель ______________ /Куренкова Л.А./", first_line=False)
+    paragraph(doc, "Студент ______________ /Худойкулзода Ш.М./", first_line=False)
+
+
+def begin_numbered_part(doc: Document):
+    doc.add_section(WD_SECTION_START.NEW_PAGE)
+    configure_section(doc.sections[-1], footer=True, start_page=2)
+
+
+def add_abstract(doc: Document, c: dict):
+    add_struct_heading(doc, "РЕФЕРАТ")
+    paragraph(
+        doc,
+        "ПРОЕКТ ЗАВОДА ПО ПРОИЗВОДСТВУ МАСЛА И ПРОДУКТОВ ИЗ ПАХТЫ. "
+        "Стр. 100, рис. 0, табл. 30, "
+        "библ. 35, 5 листов графического материала.",
+        first_line=False,
+    )
+    paragraph(
+        doc,
+        "МАСЛО СЛИВОЧНОЕ, МАСЛО КРЕСТЬЯНСКОЕ, МАСЛО ДЕСЕРТНОЕ С КОФЕ, ПАХТА, "
+        "ПРОДУКТОВЫЙ РАСЧЕТ, СЕПАРИРОВАНИЕ, ПАСТЕРИЗАЦИЯ, МАСЛООБРАЗОВАТЕЛЬ, "
+        "ПРОИЗВОДСТВЕННЫЙ КОНТРОЛЬ, СИП-МОЙКА, ТЕХНИКО-ЭКОНОМИЧЕСКАЯ ОЦЕНКА.",
+        first_line=False,
+    )
+    for text in (
+        "Цель работы - разработать проект завода по производству масла и продуктов из пахты при переработке 60 000 кг молока в смену.",
+        "В работе обоснован ассортимент проектируемого предприятия, выполнен продуктовый расчет с учетом материального баланса жира, выбраны способы производства, технологические схемы и режимы, разработаны вопросы производственного контроля, подбора оборудования, санитарной обработки, организации труда, оценки плана завода, безопасности жизнедеятельности и технико-экономической эффективности.",
+        f"Расчетный выпуск составляет: масло крестьянское - {fmt(c['peasant'])} кг/смену, масло десертное с кофе - {fmt(c['dessert'])} кг/смену, продукты из пахты - {fmt(c['pasteurized_bm'] + c['fermented'] + c['vanilla'])} кг/смену. Проект может быть использован как основа для детального технологического проектирования и выполнения графической части в КОМПАС-3D.",
+    ):
+        paragraph(doc, text)
+
+
+def add_toc(doc: Document):
+    add_struct_heading(doc, "СОДЕРЖАНИЕ")
+    par = doc.add_paragraph()
+    set_paragraph_format(par, first_line=False)
+    add_field(par, 'TOC \\o "1-3" \\h \\z \\u', "Для обновления содержания в Microsoft Word выделите его и нажмите F9.")
 
 
 def add_intro(doc: Document):
-    heading(doc, "ВВЕДЕНИЕ", 1)
-    paragraphs = [
-        "Молочная промышленность относится к числу социально значимых отраслей пищевой промышленности, поскольку обеспечивает население продуктами ежедневного спроса с высокой пищевой и биологической ценностью. Для современных предприятий важны не только объем выпуска, но и глубина переработки сырья, стабильность качества, санитарная надежность технологических линий, энергоэффективность и способность быстро реагировать на изменение потребительского спроса.",
-        "Сливочное масло занимает устойчивую позицию в структуре потребления молочных продуктов. Оно используется как самостоятельный пищевой продукт, как компонент общественного питания и как сырье для кондитерской, хлебопекарной и кулинарной продукции. Одновременно возрастает интерес к продуктам, позволяющим рационально использовать вторичные молочные ресурсы. К таким ресурсам относится пахта, образующаяся при производстве масла и содержащая ценные белки, фосфолипиды, лактозу, минеральные вещества и биологически активные компоненты оболочек жировых шариков.",
-        "Проектирование завода по выпуску масла и продуктов из пахты позволяет решить несколько технологических и экономических задач: обеспечить переработку поступающего молока, получить товарные продукты с различной добавленной стоимостью, снизить потери сухих веществ, организовать управляемую санитарную обработку оборудования и создать условия для производственного контроля на всех критических стадиях.",
-        "Цель выпускной квалификационной работы - разработать проект завода по производству масла и продуктов из пахты при переработке 60 000 кг молока в смену.",
-        "Для достижения цели необходимо выполнить следующие задачи: обосновать целесообразность проектируемого производства; рассчитать материальный баланс; выбрать технологические схемы и режимы; подобрать основное технологическое оборудование; разработать систему производственного контроля; определить численность производственного персонала; оценить условия безопасности жизнедеятельности; рассчитать основные технико-экономические показатели проекта.",
-        "Исходные данные задания предусматривают выпуск масла крестьянского, масла десертного с кофе, пахты пастеризованной, кисломолочного напитка из пахты с сахаром и напитка из пахты с ванилью. Проектирование выполнено с учетом норм технологического проектирования и требований к безопасности молока и молочной продукции.",
-        "В работе применен расчетно-аналитический метод: на основе балансов жира и массы определены потоки сливок, обезжиренного молока, масла и пахты; по расчетной производительности подобрано оборудование; по структуре операций сформирован график работы линии; по плановым объемам выпуска рассчитаны экономические показатели.",
-        "Практическая значимость работы заключается в формировании технологически согласованного решения, которое может использоваться как основа для учебного проектирования молочного предприятия и последующей детализации рабочей документации.",
+    add_struct_heading(doc, "ВВЕДЕНИЕ")
+    texts = [
+        "Молочная промышленность является одной из ключевых отраслей пищевой и перерабатывающей промышленности, обеспечивающей население продуктами ежедневного спроса. Для современной отрасли важны не только объемы производства, но и рациональное использование молочного сырья, снижение потерь сухих веществ, расширение ассортимента и выпуск безопасной продукции стабильного качества.",
+        "Сливочное масло относится к традиционным молочным продуктам с высокой энергетической ценностью. Оно применяется в питании населения, общественном питании, хлебопекарном, кондитерском и кулинарном производствах. Спрос на масло сохраняется благодаря привычной структуре потребления, высокому содержанию молочного жира и возможности выпуска продуктов с разной массовой долей жира и вкусовыми наполнителями.",
+        "Одновременно актуальна задача переработки вторичных молочных ресурсов. При производстве масла образуется пахта, содержащая белки молока, лактозу, минеральные вещества, фосфолипиды и остаточный жир. Использование пахты для питьевых и кисломолочных продуктов повышает глубину переработки сырья, снижает объем вторичных потоков и расширяет ассортимент предприятия.",
+        "Актуальность проекта определяется необходимостью комплексной переработки молока, повышения эффективности использования молочного жира и белково-углеводной части сырья, создания технологической линии, отвечающей требованиям технических регламентов и санитарных правил. Проектируемый завод должен обеспечивать приемку 60 т молока в смену и выпуск ассортимента, заданного руководителем ВКР.",
+        "Цель выпускной квалификационной работы - разработать проект завода по производству масла и продуктов из пахты.",
+        "Для достижения цели поставлены задачи: выполнить технико-экономическое обоснование проекта; проанализировать ассортимент масла и рынок сырья; обосновать ассортимент; выполнить продуктовый расчет; выбрать способы производства, технологические схемы и режимы; разработать производственный контроль; подобрать и рассчитать оборудование; определить санитарную обработку; рассчитать потребность в воде, паре и холоде; разработать организацию труда; оценить план завода; разработать мероприятия безопасности жизнедеятельности; выполнить технико-экономическую оценку.",
+        "Объектом проектирования является молокоперерабатывающий завод. Предметом проектирования являются технологические процессы получения масла крестьянского, масла десертного с кофе, пахты пастеризованной, кисломолочного напитка из пахты с сахаром и напитка из пахты с ванилью.",
+        "Практическая значимость работы состоит в разработке технологически согласованного проектного решения, включающего материальный баланс, структуру производства, выбор оборудования, режимы контроля и основные экономические показатели. Результаты могут использоваться при выполнении графической части ВКР и при последующей детализации проекта.",
     ]
-    for text in paragraphs:
-        p(doc, text)
+    for text in texts:
+        paragraph(doc, text)
 
 
-def add_teo(doc: Document, c: dict[str, float]):
-    heading(doc, "1 ТЕХНИКО-ЭКОНОМИЧЕСКОЕ ОБОСНОВАНИЕ", 1)
-    for text in [
-        "Проектируемое предприятие целесообразно размещать в зоне устойчивой сырьевой базы, где работают сельскохозяйственные организации и фермерские хозяйства молочного направления. При мощности переработки 60 т молока в смену предприятие относится к средним молокоперерабатывающим производствам, способным принимать сырье от нескольких поставщиков и формировать ассортимент с различной продолжительностью хранения.",
-        "Выбранная специализация основана на выпуске высокожирных продуктов и использовании пахты. Масло обеспечивает основную долю маржинальной выручки, а напитки из пахты расширяют ассортимент, повышают степень использования белково-углеводной части сырья и уменьшают объем вторичных ресурсов, требующих реализации без дополнительной переработки.",
-        "Сырьевая зона должна обеспечивать ежедневную поставку молока не ниже требований технического регламента и внутренних спецификаций предприятия. Особое значение имеют массовая доля жира, кислотность, бактериальная обсемененность, наличие ингибирующих веществ, термоустойчивость и температура приемки. Для проектного расчета принята массовая доля жира 3,8 %, что благоприятно для производства масла.",
-        "В качестве базовой организационной схемы принята односменная переработка молока с подготовкой оборудования до и после смены. При необходимости предприятие может переходить на удлиненный график работы за счет увеличения числа смен на участках приемки, сепарирования и фасования, так как подобранное оборудование имеет резерв по производительности.",
-        "Основной рынок сбыта включает розничные сети, предприятия общественного питания, кондитерские и хлебопекарные производства, а также локальные магазины в регионе. Масло крестьянское ориентировано на массовый спрос, десертное масло с кофе - на нишевый спрос и HoReCa, продукты из пахты - на потребителей функциональных кисломолочных напитков.",
-        "К факторам конкурентоспособности проекта относятся стабильное качество сырья, соблюдение холодовой цепи, использование закрытых технологических потоков, автоматизированная CIP-мойка, прослеживаемость партий, рациональная упаковка и возможность оперативной корректировки рецептур напитков из пахты.",
-    ]:
-        p(doc, text)
-    table(
-        doc,
-        "Таблица 1 - Исходные данные для проектирования",
-        ["Показатель", "Единица измерения", "Значение"],
-        [
-            ["Масса перерабатываемого молока", "кг/смену", fmt(c["milk"], 0)],
-            ["Массовая доля жира молока", "%", fmt(c["fat"], 1)],
-            ["Массовая доля белка молока", "%", fmt(c["protein"], 1)],
-            ["Плотность молока", "кг/м3", fmt(c["density"], 0)],
-            ["Расчетная продолжительность смены", "ч", "8"],
-            ["Температура приемки молока", "град. C", "не выше 10"],
-        ],
-        [7, 4, 4],
-    )
-    table(
-        doc,
-        "Таблица 2 - Проектируемый ассортимент",
-        ["Наименование продукта", "Основная характеристика", "Назначение"],
-        [
-            ["Масло крестьянское", "массовая доля жира 72,5 %", "розничная реализация, общественное питание"],
-            ["Масло десертное с кофе", "массовая доля жира 52,0 %, вкусовые компоненты", "десертный продукт, HoReCa"],
-            ["Пахта пастеризованная", "натуральный продукт из пахты", "питьевой продукт, кулинарное использование"],
-            ["Кисломолочный напиток из пахты с сахаром", "сквашенный продукт с сахаром", "питьевой кисломолочный продукт"],
-            ["Напиток из пахты с ванилью", "пастеризованный или ферментированный продукт с ванилью", "десертный напиток"],
-        ],
-        [5, 5, 6],
-    )
-    for text in [
-        "Экономическая устойчивость проекта зависит от цены сырого молока, выхода сливок, реализации обезжиренного молока и эффективности продаж масла. В проекте обезжиренное молоко рассматривается как товарный полуфабрикат, направляемый на смежную переработку или реализацию предприятиям, выпускающим творог, казеин, сухое обезжиренное молоко и кисломолочную продукцию.",
-        "Проектная схема обеспечивает технологическую гибкость: при росте спроса на масло возможно увеличение доли сливок, направляемых на классическое масло; при изменении спроса на напитки часть пахты может быть реализована в пастеризованном виде или использована для сквашенных продуктов.",
-        "Планировочные решения должны предусматривать разделение потоков сырья, готовой продукции, тары, персонала и отходов. Такое разделение снижает риск перекрестного загрязнения и упрощает выполнение программ производственного контроля.",
-    ]:
-        p(doc, text)
+def add_repeated(doc: Document, texts: list[str]):
+    for text in texts:
+        paragraph(doc, text)
 
 
-def add_product_calculation(doc: Document, c: dict[str, float]):
-    heading(doc, "2 ПРОДУКТОВЫЙ РАСЧЕТ И ТЕХНОЛОГИЧЕСКИЕ СХЕМЫ", 1)
-    heading(doc, "2.1 Методика расчета", 2)
-    for text in [
-        "Продуктовый расчет выполнен по балансу массы и жира. На стадии сепарирования цельное молоко разделяется на сливки массовой долей жира 35 % и обезжиренное молоко массовой долей жира 0,05 %. Потери при сепарировании, пастеризации, созревании сливок и выработке масла учтены укрупненно, что соответствует стадии учебного технологического проектирования.",
-        "Массу сливок определяют по формуле: Мсл = Мм x (Жм - Жоб) / (Жсл - Жоб), где Мм - масса молока, Жм - массовая доля жира молока, Жоб - массовая доля жира обезжиренного молока, Жсл - массовая доля жира сливок.",
-        "Для заданных условий Мсл = 60 000 x (3,8 - 0,05) / (35 - 0,05) = "
-        + fmt(c["cream"], 1)
-        + " кг. Масса обезжиренного молока составляет "
-        + fmt(c["skim"], 1)
-        + " кг. Проверка баланса жира показывает, что в сливки переходит "
-        + fmt(c["cream_fat_mass"], 1)
-        + " кг жира, в обезжиренное молоко - "
-        + fmt(c["skim_fat_mass"], 1)
-        + " кг жира.",
-        "Для выпуска масла крестьянского и десертного масла с кофе жир сливок распределен в соотношении 75:25. Такое соотношение обеспечивает основной объем традиционного продукта и одновременно формирует партию десертного масла, достаточную для самостоятельной фасовки и реализации.",
-    ]:
-        p(doc, text)
-    table(
-        doc,
-        "Таблица 3 - Баланс сепарирования молока",
-        ["Поток", "Масса, кг", "Массовая доля жира, %", "Масса жира, кг"],
-        [
-            ["Молоко цельное", fmt(c["milk"], 1), fmt(c["fat"], 2), fmt(c["milk"] * c["fat"] / 100, 1)],
-            ["Сливки", fmt(c["cream"], 1), fmt(c["cream_fat"], 2), fmt(c["cream_fat_mass"], 1)],
-            ["Обезжиренное молоко", fmt(c["skim"], 1), fmt(c["skim_fat"], 2), fmt(c["skim_fat_mass"], 1)],
-        ],
-        [5, 3, 4, 4],
-    )
-    heading(doc, "2.2 Расчет выпуска масла и продуктов из пахты", 2)
-    for text in [
-        "При расчете выхода масла принято, что 99,5 % жира сливок переходит в готовое масло, а 0,5 % приходится на технологические потери и остаточный жир пахты. Для масла крестьянского принята массовая доля жира 72,5 %, для масла десертного с кофе - 52,0 %. В десертном масле часть массы формируется за счет влаги, сухих обезжиренных веществ молока, сахара, кофейного компонента и стабилизирующей рецептурной основы.",
-        "Масса масла крестьянского составляет "
-        + fmt(c["peasant"], 1)
-        + " кг в смену. Масса масла десертного с кофе составляет "
-        + fmt(c["dessert"], 1)
-        + " кг в смену. Суммарный выпуск масла равен "
-        + fmt(c["peasant"] + c["dessert"], 1)
-        + " кг в смену.",
-        "Пахта, образующаяся при маслоизготовлении, после фильтрования и охлаждения направляется на выпуск питьевых продуктов. Расчетная масса пахты после учета производственных потерь составляет "
-        + fmt(c["buttermilk_available"], 1)
-        + " кг. Она распределена между пастеризованной пахтой, кисломолочным напитком с сахаром и напитком с ванилью в соотношении 50:30:20 по базовой пахте.",
-        "В кисломолочный напиток с сахаром вносится сахар-песок в количестве 5,5 % к массе базовой пахты. Для напитка с ванилью принято внесение сахара 4,5 % и ванильного ароматизирующего компонента 0,08 % к массе базовой пахты. Фактические рецептуры подлежат уточнению при разработке технических условий предприятия и проведении пробных выработок.",
-    ]:
-        p(doc, text)
-    table(
-        doc,
-        "Таблица 4 - Расчетный выпуск готовой продукции",
-        ["Продукт", "Расчетная масса, кг/смену", "Примечание"],
-        [
-            ["Масло крестьянское", fmt(c["peasant"], 1), "72,5 % жира"],
-            ["Масло десертное с кофе", fmt(c["dessert"], 1), "52,0 % жира"],
-            ["Пахта пастеризованная", fmt(c["buttermilk_pasteurized"], 1), "без вкусовых компонентов"],
-            ["Кисломолочный напиток из пахты с сахаром", fmt(c["fermented"], 1), "в том числе сахар " + fmt(c["fermented_sugar"], 1) + " кг"],
-            ["Напиток из пахты с ванилью", fmt(c["vanilla"], 1), "сахар " + fmt(c["vanilla_sugar"], 1) + " кг, ваниль " + fmt(c["vanilla_flavor"], 2) + " кг"],
-            ["Обезжиренное молоко на реализацию или смежную переработку", fmt(c["skim"], 1), "полуфабрикат"],
-        ],
-        [6, 4, 6],
-    )
-    heading(doc, "2.3 Технологические схемы", 2)
+def add_section_1(doc: Document):
+    add_heading(doc, "1 ТЕХНИКО-ЭКОНОМИЧЕСКОЕ ОБОСНОВАНИЕ", 1)
+    add_heading(doc, "1.1 Характеристика сливочного масла", 2)
+    add_repeated(doc, [
+        "Сливочное масло представляет собой пищевой продукт, основу которого составляет молочный жир. Его качество определяется составом используемых сливок, режимами пастеризации и созревания, способом маслоизготовления, степенью диспергирования влаги и условиями хранения.",
+        "По органолептическим показателям масло должно иметь чистый выраженный сливочный вкус и запах, однородную пластичную консистенцию, равномерный цвет от белого до желтого. Недопустимы прогорклый, кормовой, затхлый и металлический привкусы, а также выделение влаги на срезе.",
+        "Масло крестьянское с массовой долей жира 72,5 % является одним из наиболее распространенных видов сливочного масла. Для него характерно повышенное содержание плазмы по сравнению с традиционным маслом жирностью 82,5 %, что требует строгого контроля микробиологических показателей и качества распределения влаги.",
+        "Десертное масло с кофе относится к масложировым продуктам с вкусовыми компонентами на молочной основе. Его потребительские свойства определяются сочетанием молочного жира, сладкого вкуса и кофейного аромата, а технологическая устойчивость зависит от равномерности внесения сахарного сиропа и кофейного компонента.",
+    ])
+    add_table(doc, "Таблица 1 – Характеристика проектируемых видов масла", ["Показатель", "Масло крестьянское", "Масло десертное с кофе"], [
+        ["Массовая доля жира, %", "72,5", "52,0"],
+        ["Основное сырье", "пастеризованные сливки", "пастеризованные сливки, сахар, кофейный компонент"],
+        ["Способ производства", "непрерывное маслоизготовление", "маслоизготовление с рецептурной обработкой"],
+        ["Упаковка", "брикет 180 г, фольга или кашированная упаковка", "потребительская упаковка 100-180 г"],
+        ["Температура хранения", "0-5 °С", "0-5 °С"],
+    ])
+    add_heading(doc, "1.2 Анализ ассортимента масла в РФ и дальнейшее направление его развития", 2)
+    add_repeated(doc, [
+        "Ассортимент сливочного масла в Российской Федерации представлен традиционными видами масла различной жирности, сладкосливочным и кислосливочным маслом, соленым и несоленым маслом, а также маслом с наполнителями. Наиболее массовым остается сладкосливочное несоленое масло, выпускаемое в потребительской упаковке.",
+        "Развитие ассортимента связано с повышением требований потребителей к натуральности, удобству фасования, стабильности качества и расширению вкусовых решений. Перспективны продукты с контролируемой порционностью, длительным сроком годности при соблюдении холодовой цепи и четкой маркировкой состава.",
+        "Для проектируемого завода рационально сочетать массовый продукт - масло крестьянское - и продукт расширенного ассортимента - десертное масло с кофе. Такое сочетание уменьшает коммерческий риск и позволяет использовать одну технологическую основу для двух товарных направлений.",
+    ])
+    add_heading(doc, "1.2.1 Производство сливочного масла в России", 3)
+    add_repeated(doc, [
+        "Производство сливочного масла в России зависит от состояния молочного животноводства, доступности сырого молока с высокой массовой долей жира, технического уровня переработчиков и уровня внутреннего спроса. Значительная часть предприятий выпускает масло наряду с другими молочными продуктами.",
+        "Для устойчивой работы маслодельного производства важна регулярная поставка молока, так как колебания жирности и качества сырья немедленно отражаются на выходе сливок и себестоимости масла. Поэтому при проектировании необходимо учитывать сырьевую зону и возможности резервирования молока.",
+    ])
+    add_heading(doc, "1.2.2 Импорт сливочного масла в Россию", 3)
+    add_repeated(doc, [
+        "Импорт сливочного масла выполняет функцию покрытия дефицита отдельных сегментов рынка и сглаживания сезонных колебаний. На объем импорта влияют валютный курс, таможенное регулирование, логистика, требования к безопасности и конкурентоспособность отечественных производителей.",
+        "Для нового предприятия наличие импортной продукции означает необходимость поддерживать качество, сопоставимое с лучшими образцами рынка, и одновременно использовать преимущества локального производства: свежесть, сокращение логистического плеча и возможность быстрее реагировать на спрос региона.",
+    ])
+    add_heading(doc, "1.2.3 Экспорт сливочного масла", 3)
+    add_repeated(doc, [
+        "Экспорт сливочного масла возможен при стабильном качестве, наличии подтвержденной системы безопасности, прослеживаемости партий и конкурентной себестоимости. На начальном этапе проект ориентирован на внутренний региональный рынок, однако технологические решения должны позволять выпускать продукцию, соответствующую требованиям внешних рынков.",
+        "Потенциал экспорта связан с повышением глубины переработки молока, развитием брендов регионального происхождения и использованием современных упаковочных материалов, обеспечивающих сохранность продукта при транспортировании.",
+    ])
+    add_heading(doc, "1.3 Рынок сырья", 2)
+    add_repeated(doc, [
+        "Сырьем для проектируемого завода является коровье молоко-сырье, отвечающее требованиям безопасности и технологической пригодности. Для производства масла особенно важны массовая доля жира, вкус и запах молока, термоустойчивость, кислотность, бактериальная обсемененность и отсутствие ингибирующих веществ.",
+        "Проектная мощность 60 000 кг молока в смену требует устойчивой сырьевой зоны. Поставщиками могут быть сельскохозяйственные организации и фермерские хозяйства, расположенные в пределах экономически оправданной транспортной доступности. Приемка сырья должна сопровождаться лабораторным контролем каждой партии.",
+        "Сезонные колебания состава молока учитывают при нормализации сливок. В летний период жир молока обычно более мягкий, что влияет на режим созревания сливок; в зимний период требуется корректировка температур для получения пластичной консистенции масла.",
+    ])
+    add_table(doc, "Таблица 2 – Требования к молоку-сырью для проектируемого производства", ["Показатель", "Проектное значение или требование"], [
+        ["Масса принимаемого молока", "60 000 кг/смену"],
+        ["Массовая доля жира", "3,8 %"],
+        ["Массовая доля белка", "3,2 %"],
+        ["Плотность", "1028 кг/м3"],
+        ["Температура при приемке", "не выше 10 °С"],
+        ["Ингибирующие вещества", "не допускаются"],
+        ["Органолептические показатели", "чистые, без посторонних привкусов и запахов"],
+    ])
+    add_heading(doc, "1.4 Выбор и обоснование ассортимента", 2)
+    add_repeated(doc, [
+        "Ассортимент принят в соответствии с заданием на ВКР: масло крестьянское, масло десертное с кофе, пахта пастеризованная, кисломолочный напиток из пахты с сахаром, напиток из пахты с ванилью. Такой набор продуктов обеспечивает выпуск основного продукта из молочного жира и переработку пахты в товарные продукты.",
+        "Масло крестьянское выбрано как базовый массовый продукт с устойчивым спросом. Масло десертное с кофе выбрано для расширения ассортимента и формирования продукта с более выраженной добавленной стоимостью. Продукты из пахты выбраны для рационального использования вторичного молочного сырья.",
+        "Пастеризованная пахта может реализовываться как самостоятельный питьевой продукт и как сырье для общественного питания. Кисломолочный напиток с сахаром повышает потребительскую привлекательность пахты за счет мягкого кислого вкуса, а напиток с ванилью формирует десертное направление ассортимента.",
+    ])
+    add_heading(doc, "1.5 Рынок сбыта продукции и конкуренция", 2)
+    add_repeated(doc, [
+        "Основными каналами сбыта являются региональные розничные сети, магазины у дома, предприятия общественного питания, хлебопекарные и кондитерские предприятия. Масло крестьянское может поставляться как в потребительской, так и в групповой упаковке, а продукты из пахты - преимущественно в потребительской таре.",
+        "Конкуренция на рынке масла связана с присутствием федеральных брендов, региональных производителей и продукции частных торговых марок. Конкурентоспособность проектируемого предприятия должна обеспечиваться стабильным качеством, честной маркировкой, санитарной надежностью и экономически обоснованной ценой.",
+        "Для продуктов из пахты конкурентными преимуществами являются натуральная молочная основа, использование вторичного сырья без ухудшения пищевой ценности, мягкий вкус и возможность позиционирования как продукта рационального питания.",
+    ])
+    add_heading(doc, "1.6 План маркетинга", 2)
+    add_repeated(doc, [
+        "Маркетинговая стратегия проектируемого завода ориентирована на сочетание базового спроса и ассортимента с дополнительной потребительской ценностью. Масло крестьянское продвигается как традиционный продукт ежедневного использования; десертное масло с кофе - как продукт для завтраков, десертов и кофеен.",
+        "Пахта и напитки из пахты требуют информационного продвижения, так как потребительская осведомленность о пищевой ценности пахты ниже, чем о кефире или питьевом йогурте. На упаковке следует указывать натуральную молочную основу, условия хранения, пищевую ценность и рекомендации по употреблению.",
+        "Ценовая политика должна учитывать себестоимость сырья, фасовку, логистику и позиционирование. Для выхода на рынок целесообразно применять дегустации, работу с локальными сетями, поставки в учебные и социальные учреждения при соблюдении требований закупок, а также продвижение через региональную идентичность производителя.",
+    ])
+
+
+def add_product_calculation(doc: Document, c: dict):
+    add_heading(doc, "2 ОРГАНИЗАЦИЯ ПРОИЗВОДСТВА МОЛОЧНЫХ ПРОДУКТОВ", 1)
+    add_heading(doc, "2.1 Технология молочных продуктов", 2)
+    add_heading(doc, "2.1.1 Продуктовый расчёт", 3)
+    paragraph(doc, "Задача продуктового расчета - определить массу полуфабрикатов и готовой продукции, получаемых из 60 000 кг молока в смену, с учетом состава сырья, выбранного ассортимента, баланса жира и технологических потерь.")
+    paragraph(doc, "Схема переработки сырья: молоко-сырье -> очистка -> охлаждение -> подогрев -> сепарирование -> сливки и обезжиренное молоко; сливки -> пастеризация -> созревание -> маслоизготовление -> масло крестьянское, масло десертное с кофе и пахта; пахта -> пастеризация и нормализация -> пахта пастеризованная, кисломолочный напиток с сахаром, напиток с ванилью.")
+    add_table(doc, "Таблица 3 – Данные для продуктового расчета", ["Обозначение", "Показатель", "Значение"], [
+        ["Мм", "масса молока", "60 000 кг"],
+        ["Жм", "массовая доля жира в молоке", "3,8 %"],
+        ["Бм", "массовая доля белка в молоке", "3,2 %"],
+        ["ρ", "плотность молока", "1028 кг/м3"],
+        ["Жсл", "массовая доля жира в сливках", "35,0 %"],
+        ["Жоб", "массовая доля жира в обезжиренном молоке", "0,05 %"],
+        ["Жкр", "массовая доля жира в масле крестьянском", "72,5 %"],
+        ["Жд", "массовая доля жира в масле десертном с кофе", "52,0 %"],
+    ])
+    paragraph(doc, "Массу сливок определяют по балансу жира молока, сливок и обезжиренного молока по формуле:")
+    add_formula(doc, "Мсл = Мм · (Жм - Жоб) / (Жсл - Жоб)", "(1)")
+    paragraph(doc, "где Мсл - масса сливок, кг; Мм - масса молока, кг; Жм, Жоб, Жсл - массовая доля жира соответственно в молоке, обезжиренном молоке и сливках, %.", first_line=False)
+    paragraph(doc, f"Мсл = 60 000 · (3,8 - 0,05) / (35,0 - 0,05) = {fmt(c['cream'])} кг.")
+    paragraph(doc, f"Масса обезжиренного молока составляет Моб = 60 000 - {fmt(c['cream'])} = {fmt(c['skim'])} кг.")
+    add_table(doc, "Таблица 4 – Баланс сепарирования молока", ["Поток", "Масса, кг", "Массовая доля жира, %", "Масса жира, кг"], [
+        ["Молоко цельное", fmt(c["milk"]), "3,80", fmt(c["milk_fat_mass"])],
+        ["Сливки", fmt(c["cream"]), "35,00", fmt(c["cream_fat_mass"])],
+        ["Обезжиренное молоко", fmt(c["skim"]), "0,05", fmt(c["skim_fat_mass"])],
+    ])
+    paragraph(doc, "Жир сливок распределен между маслом крестьянским и маслом десертным с кофе в соотношении 75:25. Коэффициент перехода жира сливок в масло принят 0,995; оставшаяся часть учитывает потери и остаточный жир пахты.")
+    add_formula(doc, "Ммас = (Мж · Кп) / Жмас", "(2)")
+    paragraph(doc, "где Ммас - масса масла, кг; Мж - масса жира, направляемая на данный вид масла, кг; Кп - коэффициент перехода жира; Жмас - массовая доля жира в масле в долях единицы.", first_line=False)
+    paragraph(doc, f"Расчетная масса масла крестьянского равна {fmt(c['peasant'])} кг/смену. Расчетная масса масла десертного с кофе равна {fmt(c['dessert'])} кг/смену.")
+    add_table(doc, "Таблица 5 – Расчет выпуска масла", ["Показатель", "Масло крестьянское", "Масло десертное с кофе"], [
+        ["Доля жира сливок, направленная на продукт, %", "75", "25"],
+        ["Масса жира с учетом перехода, кг", fmt(c["peasant_fat_mass"]), fmt(c["dessert_fat_mass"])],
+        ["Массовая доля жира в продукте, %", "72,5", "52,0"],
+        ["Масса продукта, кг/смену", fmt(c["peasant"]), fmt(c["dessert"])],
+    ])
+    paragraph(doc, f"Массу пахты определяют как разность массы сливок, массы масла и потерь на стадии маслоизготовления. Потери сливок приняты 0,5 %, масса пахты после учета потерь при фильтровании и перекачивании - {fmt(c['buttermilk'])} кг/смену.")
+    add_table(doc, "Таблица 6 – Расчет продуктов из пахты", ["Продукт", "База пахты, кг", "Компоненты", "Масса продукта, кг/смену"], [
+        ["Пахта пастеризованная", fmt(c["pasteurized_bm"]), "без добавления компонентов", fmt(c["pasteurized_bm"])],
+        ["Кисломолочный напиток из пахты с сахаром", fmt(c["fermented_base"]), f"сахар {fmt(c['fermented_sugar'])} кг; закваска {fmt(c['fermented_starter'])} кг", fmt(c["fermented"])],
+        ["Напиток из пахты с ванилью", fmt(c["vanilla_base"]), f"сахар {fmt(c['vanilla_sugar'])} кг; ванильный компонент {fmt(c['vanilla_flavor'], 2)} кг", fmt(c["vanilla"])],
+    ])
+    add_table(doc, "Таблица 7 – Сводная таблица продуктового расчета", ["Наименование", "кг/смену", "кг/сутки", "т/год"], [
+        ["Переработка молока", fmt(c["milk"]), fmt(c["milk"]), fmt(c["milk"] * c["work_days"] / 1000)],
+        ["Сливки 35 %", fmt(c["cream"]), fmt(c["cream"]), fmt(c["cream"] * c["work_days"] / 1000)],
+        ["Обезжиренное молоко", fmt(c["skim"]), fmt(c["skim"]), fmt(c["skim"] * c["work_days"] / 1000)],
+        ["Масло крестьянское", fmt(c["peasant"]), fmt(c["peasant"]), fmt(c["peasant"] * c["work_days"] / 1000)],
+        ["Масло десертное с кофе", fmt(c["dessert"]), fmt(c["dessert"]), fmt(c["dessert"] * c["work_days"] / 1000)],
+        ["Пахта пастеризованная", fmt(c["pasteurized_bm"]), fmt(c["pasteurized_bm"]), fmt(c["pasteurized_bm"] * c["work_days"] / 1000)],
+        ["Кисломолочный напиток из пахты с сахаром", fmt(c["fermented"]), fmt(c["fermented"]), fmt(c["fermented"] * c["work_days"] / 1000)],
+        ["Напиток из пахты с ванилью", fmt(c["vanilla"]), fmt(c["vanilla"]), fmt(c["vanilla"] * c["work_days"] / 1000)],
+    ])
+    paragraph(doc, "Заключение по продуктовому расчету: заданное количество молока позволяет обеспечить выпуск всех продуктов ассортимента. Обезжиренное молоко целесообразно рассматривать как товарный полуфабрикат или направлять на смежную переработку, что повышает экономическую эффективность проекта.")
+
+
+def add_technology_sections(doc: Document):
+    add_heading(doc, "2.1.2 Выбор и обоснование способов производства", 3)
+    add_repeated(doc, [
+        "Для производства масла выбран способ непрерывного маслоизготовления из пастеризованных и физически созревших сливок. Способ обеспечивает непрерывность процесса, высокую санитарную надежность, меньшую трудоемкость по сравнению с периодическим сбиванием и возможность устойчивого получения масла с заданной массовой долей влаги.",
+        "Для масла десертного с кофе предусматривается получение жировой основы на линии маслоизготовления с последующим внесением подготовленных рецептурных компонентов в закрытом смесительном узле. Такой вариант позволяет использовать общую инфраструктуру маслоцеха и одновременно отделить операции с вкусовыми компонентами.",
+        "Для пахты пастеризованной выбран способ тепловой обработки в пластинчатой пастеризационно-охладительной установке с последующим фасованием. Для кисломолочного напитка предусмотрено сквашивание пастеризованной пахты закваской с внесением сахарного сиропа. Для напитка с ванилью выбран способ получения сладкого напитка из пастеризованной пахты с вкусовым компонентом.",
+    ])
+    add_table(doc, "Таблица 8 – Обоснование способов производства", ["Продукт", "Принятый способ", "Обоснование"], [
+        ["Масло крестьянское", "непрерывное маслоизготовление", "стабильное качество, механизация, закрытый поток"],
+        ["Масло десертное с кофе", "маслоизготовление с рецептурной обработкой", "гибкость рецептуры, равномерное внесение кофе и сахара"],
+        ["Пахта пастеризованная", "пастеризация и фасование", "минимальная переработка, сохранение пищевой ценности"],
+        ["Кисломолочный напиток из пахты с сахаром", "сквашивание пахты", "формирование кисломолочного вкуса и повышение стойкости"],
+        ["Напиток из пахты с ванилью", "пастеризация, внесение сиропа и ароматизатора", "получение десертного питьевого продукта"],
+    ])
+    add_heading(doc, "2.1.3 Технологические схемы производства продуктов", 3)
     schemes = [
-        "Приемка молока -> учет массы -> очистка -> охлаждение -> резервирование -> подогрев -> сепарирование -> получение сливок и обезжиренного молока.",
-        "Сливки -> нормализация по жиру -> пастеризация -> дезодорация при необходимости -> охлаждение -> физическое созревание -> маслообразователь -> посол или внесение рецептурных компонентов -> фасование -> охлаждение -> хранение.",
-        "Пахта -> фильтрование -> нормализация -> пастеризация -> охлаждение -> фасование пастеризованной пахты.",
-        "Пахта -> пастеризация -> охлаждение до температуры заквашивания -> внесение закваски и сахара -> сквашивание -> перемешивание -> охлаждение -> фасование кисломолочного напитка.",
-        "Пахта -> пастеризация -> внесение сахара и ванильного компонента -> гомогенизация при необходимости -> охлаждение -> фасование напитка с ванилью.",
+        "Молоко-сырье: приемка -> учет массы -> очистка -> охлаждение до 4 +/- 2 °С -> резервирование -> подогрев до 40-45 °С -> сепарирование.",
+        "Масло крестьянское: сливки 35 % -> пастеризация 85-90 °С -> охлаждение -> физическое созревание 4-8 °С -> непрерывное маслоизготовление -> регулирование влаги -> фасование -> охлаждение -> хранение.",
+        "Масло десертное с кофе: сливки -> пастеризация -> созревание -> маслоизготовление -> подготовка сахарно-кофейной фазы -> смешивание -> фасование -> охлаждение -> хранение.",
+        "Пахта пастеризованная: пахта -> фильтрование -> пастеризация 76-80 °С -> охлаждение до 4-6 °С -> фасование -> хранение.",
+        "Кисломолочный напиток: пахта -> пастеризация -> охлаждение до температуры заквашивания -> внесение закваски и сахарного сиропа -> сквашивание -> перемешивание -> охлаждение -> фасование.",
+        "Напиток с ванилью: пахта -> пастеризация -> внесение сахарного сиропа и ванильного компонента -> перемешивание -> охлаждение -> фасование -> хранение.",
     ]
-    for scheme in schemes:
-        p(doc, scheme)
-    for text in [
-        "Технологические схемы построены по принципу закрытых потоков. Открытые операции допускаются только при подготовке рецептурных компонентов и обслуживании фасовочного оборудования. Все участки, контактирующие с продуктом после пастеризации, должны быть защищены от вторичного загрязнения.",
-        "Ключевыми контрольными точками являются приемка сырья, пастеризация сливок и пахты, температура созревания сливок, кислотность и органолептическое состояние пахты, санитарное состояние фасовочных автоматов, температура хранения готовой продукции.",
-    ]:
-        p(doc, text)
+    for item in schemes:
+        paragraph(doc, item)
+    add_heading(doc, "2.1.4 Обоснование технологических режимов", 3)
+    add_repeated(doc, [
+        "Приемка молока сопровождается контролем температуры и качества, так как несоответствующее сырье может ухудшить вкус масла и микробиологическую стойкость продуктов из пахты. Охлаждение до 4 +/- 2 °С ограничивает развитие микрофлоры до начала переработки.",
+        "Сепарирование проводят при 40-45 °С. При более низкой температуре возрастает вязкость молока и ухудшается отделение жировой фазы, при чрезмерном повышении температуры увеличиваются энергетические затраты и риск ухудшения качества сырья.",
+        "Пастеризация сливок при 85-90 °С необходима для инактивации липолитических ферментов, снижения микрофлоры и формирования чистого вкуса масла. Физическое созревание сливок обеспечивает кристаллизацию части молочного жира и получение пластичной консистенции.",
+        "Для пахты применяют режим пастеризации 76-80 °С с выдержкой 15-20 с. Для сквашиваемого напитка важны температура внесения закваски и конечная кислотность, так как они определяют вкус, консистенцию и срок годности.",
+        "Фасование масла выполняют после стабилизации структуры, а продукты из пахты фасуют при температуре, исключающей вторичное загрязнение. Хранение всех продуктов предусматривается в холодильных камерах с регистрацией температуры.",
+    ])
+    add_table(doc, "Таблица 9 – Основные технологические режимы", ["Операция", "Режим", "Назначение"], [
+        ["Охлаждение молока", "4 +/- 2 °С", "сдерживание микрофлоры"],
+        ["Подогрев перед сепарированием", "40-45 °С", "улучшение отделения сливок"],
+        ["Пастеризация сливок", "85-90 °С, 15-20 с", "инактивация ферментов"],
+        ["Созревание сливок", "4-8 °С, 8-12 ч", "кристаллизация молочного жира"],
+        ["Пастеризация пахты", "76-80 °С, 15-20 с", "обеспечение безопасности"],
+        ["Сквашивание напитка", "30-37 °С до заданной кислотности", "формирование вкуса и структуры"],
+        ["Хранение масла", "0-5 °С", "сохранение качества"],
+        ["Хранение напитков", "2-6 °С", "сохранение безопасности"],
+    ])
+    add_heading(doc, "2.1.5 Характеристика продуктов", 3)
+    add_table(doc, "Таблица 10 – Характеристика готовой продукции", ["Продукт", "Органолептическая характеристика", "Фасование"], [
+        ["Масло крестьянское", "чистый сливочный вкус, пластичная консистенция", "брикет 180 г, групповая тара"],
+        ["Масло десертное с кофе", "сладкий сливочно-кофейный вкус, однородная масса", "пачка 100-180 г"],
+        ["Пахта пастеризованная", "чистый кисловатый вкус, однородная жидкость", "бутылка или пакет 0,5 л"],
+        ["Кисломолочный напиток из пахты с сахаром", "кисломолочный сладковатый вкус", "бутылка 0,5 л"],
+        ["Напиток из пахты с ванилью", "мягкий сладкий вкус с ароматом ванили", "бутылка 0,5 л"],
+    ])
+    paragraph(doc, "Характеристика продуктов подтверждает, что ассортимент объединяет традиционный маслодельный продукт и продукты рационального использования пахты. Это повышает комплексность переработки сырья и снижает объем нереализованных вторичных ресурсов.")
 
 
-def add_technology(doc: Document):
-    heading(doc, "3 ВЫБОР И ОБОСНОВАНИЕ ТЕХНОЛОГИЧЕСКИХ РЕЖИМОВ", 1)
-    heading(doc, "3.1 Приемка и первичная обработка молока", 2)
-    for text in [
-        "Молоко принимают партиями с проверкой сопроводительных документов, температуры, органолептических показателей, кислотности, плотности, массовой доли жира и белка, группы чистоты, бактериальной обсемененности и отсутствия ингибирующих веществ. Партии, не соответствующие требованиям безопасности и внутренним спецификациям, к переработке не допускаются.",
-        "После приемки молоко очищают на молокоочистителях или фильтрах, охлаждают до 4 +/- 2 град. C и направляют в резервуары кратковременного хранения. Продолжительность хранения сырого молока до переработки должна быть минимальной, так как рост психротрофной микрофлоры ухудшает вкус масла и снижает стойкость пахты.",
-        "Перед сепарированием молоко подогревают до 40-45 град. C. Такая температура уменьшает вязкость, повышает эффективность разделения жировой фазы и снижает остаточную массовую долю жира в обезжиренном молоке.",
-    ]:
-        p(doc, text)
-    heading(doc, "3.2 Получение и подготовка сливок", 2)
-    for text in [
-        "Сливки нормализуют до массовой доли жира 35 %. Для производства масла этот уровень является технологически удобным: сливки достаточно концентрированы, но сохраняют перекачиваемость и равномерно пастеризуются в пластинчатой установке.",
-        "Пастеризацию сливок проводят при температуре 85-90 град. C с выдержкой 15-20 с. Повышенный режим по сравнению с пастеризацией питьевого молока необходим для инактивации липаз, снижения общей микрофлоры и формирования чистого вкуса масла. При наличии выраженных кормовых или посторонних запахов предусматривается вакуум-дезодорация сливок.",
-        "После пастеризации сливки быстро охлаждают до 4-8 град. C и выдерживают для физического созревания. В процессе созревания происходит кристаллизация части молочного жира, что обеспечивает устойчивую структуру масляного зерна и пластичность готового масла.",
-        "Режим созревания подбирают с учетом сезона и йодного числа жира. Для летнего молока с более мягким жиром целесообразно использовать более низкую температуру созревания; для зимнего молока допускается несколько более высокая температура, чтобы избежать излишне твердой консистенции масла.",
-    ]:
-        p(doc, text)
-    heading(doc, "3.3 Производство масла крестьянского", 2)
-    for text in [
-        "Для масла крестьянского принят способ преобразования высокожирных сливок или непрерывного сбивания созревших сливок с последующей обработкой масляного зерна. В проекте предпочтение отдано непрерывному маслоизготовителю, так как он обеспечивает стабильный режим, меньшую трудоемкость и компактное размещение на производственной площади.",
-        "Созревшие сливки подают в маслообразователь, где в результате механического воздействия разрушается оболочка жировых шариков, происходит агрегация жира и отделение пахты. Масляное зерно обрабатывается до получения однородной пластичной массы с заданной массовой долей влаги.",
-        "Регулирование влаги проводят дозированием пастеризованной воды или пахты, контролируя массовую долю влаги экспресс-методом. Для масла крестьянского массовая доля жира должна соответствовать требованиям стандарта, а консистенция должна быть плотной, пластичной и однородной.",
-    ]:
-        p(doc, text)
-    heading(doc, "3.4 Производство масла десертного с кофе", 2)
-    for text in [
-        "Десертное масло с кофе относится к продуктам повышенной потребительской привлекательности. Его рецептура включает молочный жир, молочную плазму, сахар, кофейный компонент и стабилизирующую основу. Все рецептурные компоненты должны иметь документы о качестве и безопасности.",
-        "Кофейный компонент вносят в виде водного экстракта или тонкодисперсной пасты, предварительно профильтрованной и пастеризованной. Сахар растворяют в части водной фазы, фильтруют и пастеризуют. Такой порядок подготовки снижает риск механических включений и вторичного микробиологического загрязнения.",
-        "Смешивание ведут при температуре, обеспечивающей пластичность жировой фазы и равномерное распределение вкусовых компонентов. После фасования десертное масло быстро охлаждают, чтобы закрепить структуру и предотвратить отделение влаги.",
-    ]:
-        p(doc, text)
-    heading(doc, "3.5 Производство продуктов из пахты", 2)
-    for text in [
-        "Пахта является ценной основой для питьевых продуктов. Ее состав зависит от состава сливок и режима маслоизготовления, но обычно включает белки молока, лактозу, минеральные вещества, фосфолипиды и остаточный жир. Для получения стабильного вкуса пахту фильтруют и перерабатывают без длительного хранения.",
-        "Пастеризованную пахту получают тепловой обработкой при 76-80 град. C с выдержкой 15-20 с и последующим охлаждением до температуры фасования. Для кисломолочного напитка пахту пастеризуют при более жестком режиме, охлаждают до температуры заквашивания и вносят производственную закваску.",
-        "Сквашивание проводят до достижения требуемой кислотности и формирования сгустка. После завершения сквашивания сгусток перемешивают, охлаждают и направляют на фасование. Сахар вносят в виде пастеризованного сиропа, чтобы обеспечить растворение и санитарную надежность.",
-        "Напиток с ванилью может выпускаться как сладкий пастеризованный напиток либо как мягкий кисломолочный продукт. В проекте предусмотрена технология с тепловой обработкой основы, внесением сахара и ванильного компонента, перемешиванием и фасованием в потребительскую тару.",
-    ]:
-        p(doc, text)
-    table(
-        doc,
-        "Таблица 5 - Основные технологические режимы",
-        ["Операция", "Режим", "Цель"],
-        [
-            ["Охлаждение сырого молока", "4 +/- 2 град. C", "сдерживание развития микрофлоры"],
-            ["Подогрев перед сепарированием", "40-45 град. C", "повышение эффективности разделения"],
-            ["Пастеризация сливок", "85-90 град. C, 15-20 с", "инактивация ферментов и микрофлоры"],
-            ["Созревание сливок", "4-8 град. C, 8-12 ч", "кристаллизация жира"],
-            ["Маслоизготовление", "непрерывный режим", "получение масла и пахты"],
-            ["Пастеризация пахты", "76-80 град. C, 15-20 с", "обеспечение безопасности продукта"],
-            ["Сквашивание напитка", "30-37 град. C до заданной кислотности", "формирование вкуса и консистенции"],
-            ["Хранение масла", "0-5 град. C", "сохранение качества"],
-            ["Хранение напитков из пахты", "2-6 град. C", "сохранение микробиологической стабильности"],
-        ],
-        [5, 5, 6],
-    )
+def add_control_equipment_labor(doc: Document, c: dict):
+    add_heading(doc, "2.2 Контроль производства", 2)
+    add_repeated(doc, [
+        "Производственный контроль организуется на всех стадиях: входной контроль молока и материалов, технологический контроль полуфабрикатов, контроль готовой продукции, санитарно-гигиенический контроль оборудования и контроль условий хранения.",
+        "Лаборатория предприятия включает приемную, химическую и микробиологическую зоны, моечную лабораторной посуды и помещение для хранения реактивов. Средства измерений должны проходить поверку, а результаты контроля фиксируются в журналах и электронных записях.",
+    ])
+    add_table(doc, "Таблица 11 – Фрагмент программы производственного контроля", ["Объект", "Показатель", "Периодичность", "Ответственный"], [
+        ["Молоко-сырье", "температура, органолептика, кислотность, плотность", "каждая партия", "лаборант"],
+        ["Молоко-сырье", "жир, белок, ингибирующие вещества", "каждая партия", "лаборатория"],
+        ["Сливки", "массовая доля жира, кислотность", "каждая партия", "лаборант"],
+        ["Пастеризация", "температура и выдержка", "непрерывно", "аппаратчик"],
+        ["Масло", "массовая доля жира, влаги, органолептика", "каждая партия", "лаборатория"],
+        ["Пахта и напитки", "кислотность, массовая доля жира, микробиология", "каждая партия", "лаборатория"],
+        ["Оборудование", "качество санитарной обработки", "после мойки", "мастер, лаборант"],
+    ])
+    add_table(doc, "Таблица 12 – Методы контроля показателей", ["Показатель", "Метод или документ", "Средства контроля"], [
+        ["Массовая доля жира", "ГОСТ 5867", "бутирометр, центрифуга"],
+        ["Плотность молока", "ГОСТ 3625", "ареометр, термометр"],
+        ["Кислотность", "ГОСТ 3624", "бюретка, титровальная установка"],
+        ["Белок", "ГОСТ 25179", "анализатор или колориметр"],
+        ["Микробиологические показатели", "ГОСТ 9225 и действующие перечни методов", "термостат, чашки Петри"],
+        ["Температура хранения", "внутренний стандарт предприятия", "терморегистратор"],
+    ])
+    add_heading(doc, "2.3 Технологическое оборудование", 2)
+    add_heading(doc, "2.3.1 Подбор оборудования", 3)
+    paragraph(doc, "Оборудование подбирают по расчетной производительности, длительности эффективной работы в смену, резерву на санитарную обработку и необходимости обеспечения закрытых потоков. Ведущим оборудованием является непрерывный маслоизготовитель, так как он определяет производительность маслоцеха.")
+    add_table(doc, "Таблица 13 – Сводная таблица технологического оборудования", ["Оборудование", "Производительность или вместимость", "Количество", "Назначение"], [
+        ["Линия приемки и учета молока", "10-15 т/ч", "1", "приемка и учет сырья"],
+        ["Резервуар сырого молока", "30 м3", "2", "кратковременное хранение"],
+        ["Сепаратор-сливкоотделитель", "10 000 л/ч", "1", "получение сливок"],
+        ["Пастеризационно-охладительная установка для сливок", "3 000 кг/ч", "1", "тепловая обработка"],
+        ["Резервуар созревания сливок", "3 м3", "3", "созревание сливок"],
+        ["Непрерывный маслоизготовитель", "1 500 кг/ч", "1", "выработка масла"],
+        ["Смеситель рецептурных компонентов", "500 кг/ч", "1", "масло десертное"],
+        ["Фасовочный автомат масла", "1 200 уп./ч", "2", "фасование масла"],
+        ["Емкость пахты", "2 м3", "2", "накопление пахты"],
+        ["Пастеризатор пахты", "2 000 кг/ч", "1", "тепловая обработка пахты"],
+        ["Резервуар сквашивания", "2 м3", "2", "кисломолочный напиток"],
+        ["Автомат фасования напитков", "2 000 бут./ч", "1", "фасование продуктов из пахты"],
+        ["CIP-станция", "3 контура", "1", "санитарная обработка"],
+    ])
+    add_heading(doc, "2.3.2 Расчёт оборудования", 3)
+    paragraph(doc, "Расчет количества оборудования выполняется по формуле:")
+    add_formula(doc, "n = M / (Q · τ · Kи)", "(3)")
+    paragraph(doc, "где n - расчетное количество единиц оборудования; M - масса продукта, кг; Q - часовая производительность, кг/ч; τ - продолжительность работы, ч; Kи - коэффициент использования оборудования.", first_line=False)
+    add_table(doc, "Таблица 14 – Проверка загрузки оборудования", ["Операция", "Масса, кг", "Принятая производительность", "Расчетное время"], [
+        ["Приемка молока", fmt(c["milk"]), "10 000 кг/ч", "6,0 ч"],
+        ["Сепарирование", fmt(c["milk"]), "10 000 кг/ч", "6,0 ч"],
+        ["Пастеризация сливок", fmt(c["cream"]), "3 000 кг/ч", "2,2 ч"],
+        ["Маслоизготовление", fmt(c["peasant"] + c["dessert"]), "1 500 кг/ч", "2,3 ч"],
+        ["Пастеризация пахты", fmt(c["buttermilk"]), "2 000 кг/ч", "1,5 ч"],
+        ["Фасование напитков", fmt(c["pasteurized_bm"] + c["fermented"] + c["vanilla"]), "2 000 бут./ч", "1,5-2,0 ч"],
+    ])
+    add_heading(doc, "2.3.3 Санитарная обработка технологического оборудования", 3)
+    add_repeated(doc, [
+        "Санитарная обработка предусматривается по маршрутам CIP-мойки. Для оборудования, контактирующего с молоком и сливками до тепловой обработки, применяют предварительное ополаскивание, щелочную мойку, промежуточное ополаскивание, кислотную мойку по необходимости и заключительное ополаскивание.",
+        "Для пастеризаторов и маслоизготовителя обязательна регулярная кислотная очистка для удаления минеральных отложений. Моющие средства выбирают с учетом материала оборудования, характера загрязнений и требований инструкции по санитарной обработке.",
+    ])
+    add_table(doc, "Таблица 15 – Циклограмма санитарной обработки", ["Маршрут", "Операция", "Средство", "Концентрация, %", "Температура, °С", "Время, мин"], [
+        ["Трубопроводы молока", "ополаскивание", "вода", "-", "35-40", "5"],
+        ["Трубопроводы молока", "щелочная мойка", "щелочное средство", "1,0-1,5", "65-75", "20"],
+        ["Пастеризатор сливок", "кислотная мойка", "кислотное средство", "0,5-1,0", "60-65", "15"],
+        ["Маслоизготовитель", "дезинфекция", "разрешенное средство", "по инструкции", "20-40", "10"],
+        ["Линия пахты", "заключительное ополаскивание", "питьевая вода", "-", "20-25", "5"],
+    ])
+    add_heading(doc, "2.3.4 Сводные таблицы расхода пара, воды, холода", 3)
+    add_table(doc, "Таблица 16 – Укрупненный расход энергоресурсов", ["Продукт или операция", "Холод, тыс. ккал/т", "Пар, т/т", "Вода, м3/т", "Электроэнергия, кВт·ч/т"], [
+        ["Масло сливочное, метод сбивания", "286", "1,7", "57", "734"],
+        ["Пахта и напитки из пахты, принято по группе ЦМП", "87", "0,3", "9", "119"],
+        ["Санитарная обработка", "-", "по графику", "по циклограмме", "по мощности насосов"],
+    ])
+    add_table(doc, "Таблица 17 – Расчет расхода ресурсов за смену", ["Направление", "Количество продукта, т/смену", "Пар, т/смену", "Вода, м3/смену", "Электроэнергия, кВт·ч/смену"], [
+        ["Масло", fmt((c["peasant"] + c["dessert"]) / 1000, 3), fmt((c["peasant"] + c["dessert"]) / 1000 * 1.7, 2), fmt((c["peasant"] + c["dessert"]) / 1000 * 57, 1), fmt((c["peasant"] + c["dessert"]) / 1000 * 734, 0)],
+        ["Продукты из пахты", fmt((c["pasteurized_bm"] + c["fermented"] + c["vanilla"]) / 1000, 3), fmt((c["pasteurized_bm"] + c["fermented"] + c["vanilla"]) / 1000 * 0.3, 2), fmt((c["pasteurized_bm"] + c["fermented"] + c["vanilla"]) / 1000 * 9, 1), fmt((c["pasteurized_bm"] + c["fermented"] + c["vanilla"]) / 1000 * 119, 0)],
+        ["Итого", "-", fmt((c["peasant"] + c["dessert"]) / 1000 * 1.7 + (c["pasteurized_bm"] + c["fermented"] + c["vanilla"]) / 1000 * 0.3, 2), fmt((c["peasant"] + c["dessert"]) / 1000 * 57 + (c["pasteurized_bm"] + c["fermented"] + c["vanilla"]) / 1000 * 9, 1), fmt((c["peasant"] + c["dessert"]) / 1000 * 734 + (c["pasteurized_bm"] + c["fermented"] + c["vanilla"]) / 1000 * 119, 0)],
+    ])
+    add_heading(doc, "2.4 Организация труда рабочих", 2)
+    add_repeated(doc, [
+        "Для проектируемого завода принимается коллективная форма организации труда с выделением специализированных рабочих мест на приемке, аппаратном участке, маслоцехе, участке пахты, фасовании, лаборатории и санитарной обработке. Управление сменой осуществляет мастер.",
+        "Разделение труда является технологическим и профессиональным. Кооперация труда осуществляется внутри сменной производственной бригады, так как операции приемки, сепарирования, пастеризации, маслоизготовления и фасования взаимосвязаны по времени.",
+    ])
+    add_table(doc, "Таблица 18 – Численность рабочих в смену", ["Должность", "Разряд", "Количество, чел.", "Функции"], [
+        ["Мастер смены", "-", "1", "организация смены"],
+        ["Аппаратчик приемки молока", "4", "2", "приемка и учет"],
+        ["Аппаратчик сепарирования", "4", "1", "сепарирование"],
+        ["Аппаратчик пастеризации", "4", "1", "тепловая обработка"],
+        ["Оператор маслоизготовителя", "5", "2", "выработка масла"],
+        ["Оператор рецептурного участка", "4", "1", "подготовка компонентов"],
+        ["Оператор фасования масла", "3", "2", "фасование"],
+        ["Оператор участка напитков", "4", "2", "пахта и напитки"],
+        ["Лаборант", "4", "2", "контроль"],
+        ["Мойщик оборудования", "3", "2", "санитарная обработка"],
+        ["Кладовщик", "3", "1", "склад готовой продукции"],
+        ["Слесарь-наладчик", "5", "1", "обслуживание оборудования"],
+    ])
+    add_heading(doc, "2.5 Оценка организации производства по графику производственных процессов", 2)
+    add_table(doc, "Таблица 19 – График производственных процессов", ["Операция", "0-2 ч", "2-4 ч", "4-6 ч", "6-8 ч", "После смены"], [
+        ["Приемка молока", "выполняется", "выполняется", "выполняется", "-", "-"],
+        ["Сепарирование", "-", "выполняется", "выполняется", "выполняется", "-"],
+        ["Пастеризация сливок", "-", "выполняется", "выполняется", "резерв", "-"],
+        ["Маслоизготовление", "-", "-", "выполняется", "выполняется", "-"],
+        ["Переработка пахты", "-", "-", "подготовка", "выполняется", "-"],
+        ["Фасование", "-", "подготовка", "выполняется", "выполняется", "-"],
+        ["CIP-мойка", "локально", "-", "-", "локально", "полная мойка"],
+    ])
+    add_table(doc, "Таблица 20 – Показатели оценки организации производства", ["Показатель", "Значение"], [
+        ["Объем производства готовой продукции за смену", fmt(c["peasant"] + c["dessert"] + c["pasteurized_bm"] + c["fermented"] + c["vanilla"]) + " кг"],
+        ["Численность рабочих в смену", "18 чел."],
+        ["Выработка готовой продукции на одного рабочего", fmt((c["peasant"] + c["dessert"] + c["pasteurized_bm"] + c["fermented"] + c["vanilla"]) / 18) + " кг/чел."],
+        ["Степень механизации основных операций", "не менее 85 %"],
+    ])
 
 
-def add_control(doc: Document):
-    heading(doc, "4 ПРОИЗВОДСТВЕННЫЙ КОНТРОЛЬ", 1)
+def add_plan_safety_economics(doc: Document, c: dict):
+    add_heading(doc, "3 ОЦЕНКА ПЛАНА ЗАВОДА", 1)
+    add_repeated(doc, [
+        "План завода должен обеспечивать прямоточность движения сырья, полуфабрикатов, готовой продукции, тары и персонала. Сырьевая рампа и приемное отделение размещаются со стороны поступления молока, далее располагаются аппаратный участок, маслоцех, участок продуктов из пахты, фасовочные помещения и холодильные камеры.",
+        "Потоки сырого молока и пастеризованной продукции разделяются санитарными барьерами. Возвратная тара и отходы не должны пересекаться с маршрутом готовой продукции. Лаборатория располагается так, чтобы обеспечить оперативный контроль приемки и производства.",
+        "Ширина проходов и расстояния между оборудованием принимаются с учетом обслуживания, мойки, ремонта и эвакуации. Оборудование размещается с обеспечением доступа к арматуре, насосам, пультам управления и моющим головкам.",
+    ])
+    add_table(doc, "Таблица 21 – Оценка производственных помещений", ["Помещение", "Назначение", "Проектная площадь, м2", "Оценка"], [
+        ["Приемное отделение", "приемка молока", "90", "обеспечивает приемку 60 т/смену"],
+        ["Аппаратное отделение", "сепарирование и пастеризация", "160", "обеспечены проходы и санитарные зоны"],
+        ["Маслоцех", "выработка масла", "180", "размещается ведущая линия"],
+        ["Участок пахты", "пастеризация и сквашивание", "120", "разделен от сырого потока"],
+        ["Фасовочное отделение", "фасование масла и напитков", "140", "зона повышенной чистоты"],
+        ["Холодильные камеры", "хранение продукции", "180", "обеспечивают сменный запас"],
+        ["Лаборатория", "контроль качества", "80", "связана с приемкой и производством"],
+    ])
+    add_heading(doc, "4 БЕЗОПАСНОСТЬ ЖИЗНЕДЕЯТЕЛЬНОСТИ", 1)
+    add_heading(doc, "4.1 Анализ состояния условий и охраны труда", 2)
+    add_repeated(doc, [
+        "На проектируемом предприятии основными опасными и вредными производственными факторами являются движущиеся части оборудования, горячие поверхности и теплоносители, химические моющие средства, влажные полы, низкие температуры холодильных камер, шум насосов и компрессоров, а также электрическое оборудование во влажной среде.",
+        "Организация охраны труда включает вводный и первичный инструктаж, обучение безопасным методам работы, проверку знаний, выдачу средств индивидуальной защиты, медицинские осмотры, трехступенчатый контроль и расследование инцидентов.",
+    ])
+    add_heading(doc, "4.2 Обоснование и разработка мер безопасности при производстве продуктов", 2)
+    add_table(doc, "Таблица 22 – Меры безопасности при производстве", ["Фактор", "Риск", "Мероприятие"], [
+        ["Горячая вода и пар", "ожоги", "теплоизоляция, предупреждающие знаки, инструкции"],
+        ["Щелочные и кислотные растворы", "химические ожоги", "СИЗ, дозирование, промывочные души"],
+        ["Вращающиеся механизмы", "травмирование", "кожухи и блокировки"],
+        ["Скользкие полы", "падение", "уклоны, трапы, уборка проливов"],
+        ["Холодильные камеры", "переохлаждение", "теплая спецодежда и аварийное открывание"],
+    ])
+    add_heading(doc, "4.3 Технические меры безопасности", 2)
+    add_repeated(doc, [
+        "Технологическое оборудование оснащается защитными ограждениями, аварийными кнопками остановки, заземлением, блокировками крышек и световой сигнализацией. Пульты управления размещаются вне опасных зон и обеспечивают хороший обзор обслуживаемой линии.",
+        "Электробезопасность обеспечивается применением оборудования во влагозащищенном исполнении, защитным заземлением, устройствами защитного отключения и регламентной проверкой состояния кабельных линий.",
+    ])
+    add_heading(doc, "4.4 Санитарно-гигиенические мероприятия", 2)
+    add_table(doc, "Таблица 23 – Показатели воздухообмена и освещения", ["Помещение", "Основные факторы", "Воздухообмен", "Освещенность, лк"], [
+        ["Приемка молока", "влажность, моющие растворы", "приточно-вытяжной", "200"],
+        ["Аппаратное отделение", "тепловыделения", "механическая вентиляция", "300"],
+        ["Маслоцех", "влажность, шум", "приточно-вытяжной", "300"],
+        ["Фасовочное отделение", "санитарная чистота", "фильтрованный приток", "300"],
+        ["Лаборатория", "реактивы", "местная вытяжка", "400"],
+    ])
+    add_heading(doc, "4.5 Пожарная безопасность", 2)
+    add_repeated(doc, [
+        "Пожарная безопасность обеспечивается исправностью электрооборудования, наличием автоматической пожарной сигнализации, первичных средств пожаротушения, планов эвакуации и обучением персонала действиям при пожаре.",
+        "В производственных помещениях устанавливаются огнетушители, пожарные краны и указатели эвакуационных выходов. Пути эвакуации должны быть свободными, двери открываться по направлению выхода, а хранение упаковочных материалов организуется в специально выделенной зоне.",
+    ])
+    add_heading(doc, "5 ТЕХНИКО-ЭКОНОМИЧЕСКАЯ ОЦЕНКА ПРОЕКТА", 1)
+    add_heading(doc, "5.1 Расчёт себестоимости продукции", 2)
+    prices = {"milk": 38.0, "sugar": 65.0, "coffee": 480.0, "vanilla": 900.0}
+    annual_products = {
+        "Масло крестьянское": c["peasant"] * c["work_days"] / 1000,
+        "Масло десертное с кофе": c["dessert"] * c["work_days"] / 1000,
+        "Пахта пастеризованная": c["pasteurized_bm"] * c["work_days"] / 1000,
+        "Кисломолочный напиток из пахты с сахаром": c["fermented"] * c["work_days"] / 1000,
+        "Напиток из пахты с ванилью": c["vanilla"] * c["work_days"] / 1000,
+    }
+    add_table(doc, "Таблица 24 – Годовой выпуск продукции", ["Продукт", "Выпуск, т/год"], [[k, fmt(v, 2)] for k, v in annual_products.items()])
+    add_table(doc, "Таблица 25 – Укрупненная калькуляция себестоимости", ["Статья затрат", "Сумма, млн руб./год"], [
+        ["Сырье молоко цельное", fmt(c["milk"] * c["work_days"] / 1000 * prices["milk"], 2)],
+        ["Сахар, кофе, ваниль, закваски", "32,50"],
+        ["Упаковочные материалы", "58,00"],
+        ["Пар, холод, вода, электроэнергия", "39,00"],
+        ["Основная и дополнительная заработная плата с отчислениями", "76,00"],
+        ["Содержание и эксплуатация оборудования", "42,00"],
+        ["Цеховые, общезаводские и коммерческие расходы", "74,00"],
+    ])
+    add_heading(doc, "5.2 Расчет прибыли, оптовых и отпускных цен", 2)
+    sale_prices = {
+        "Масло крестьянское": 820,
+        "Масло десертное с кофе": 920,
+        "Пахта пастеризованная": 75,
+        "Кисломолочный напиток из пахты с сахаром": 95,
+        "Напиток из пахты с ванилью": 105,
+    }
+    revenue_rows = []
+    revenue = 0.0
+    for product, tons in annual_products.items():
+        value = tons * 1000 * sale_prices[product] / 1_000_000
+        revenue += value
+        revenue_rows.append([product, fmt(tons, 2), str(sale_prices[product]), fmt(value, 2)])
+    add_table(doc, "Таблица 26 – Расчет выручки", ["Продукт", "Выпуск, т/год", "Цена, руб./кг", "Выручка, млн руб."], revenue_rows)
+    add_heading(doc, "5.3 Расчёт технико-экономических показателей", 2)
+    costs = c["milk"] * c["work_days"] / 1000 * prices["milk"] + 32.5 + 58 + 39 + 76 + 42 + 74
+    profit = revenue - costs
+    net_profit = profit * 0.8
+    investment = 495.0
+    depreciation = 36.0
+    payback = investment / (net_profit + depreciation)
+    add_table(doc, "Таблица 27 – Технико-экономические показатели проекта", ["Показатель", "Значение"], [
+        ["Переработка молока", "15 000 т/год"],
+        ["Выпуск масла", fmt((c["peasant"] + c["dessert"]) * c["work_days"] / 1000, 2) + " т/год"],
+        ["Выпуск продуктов из пахты", fmt((c["pasteurized_bm"] + c["fermented"] + c["vanilla"]) * c["work_days"] / 1000, 2) + " т/год"],
+        ["Годовая выручка", fmt(revenue, 2) + " млн руб."],
+        ["Годовая себестоимость", fmt(costs, 2) + " млн руб."],
+        ["Прибыль до налогообложения", fmt(profit, 2) + " млн руб."],
+        ["Чистая прибыль", fmt(net_profit, 2) + " млн руб."],
+        ["Капитальные вложения", fmt(investment, 2) + " млн руб."],
+        ["Срок окупаемости", fmt(payback, 2) + " года"],
+    ])
+    add_heading(doc, "5.4 Анализ точки безубыточности", 2)
+    fixed_costs = 210.0
+    variable_share = 0.62
+    contribution = revenue * (1 - variable_share)
+    breakeven_revenue = fixed_costs / (contribution / revenue)
+    add_formula(doc, "Тб = Зпост / (Ц - Зпер)", "(4)")
+    paragraph(doc, "где Тб - точка безубыточности; Зпост - постоянные затраты; Ц - цена единицы продукции; Зпер - переменные затраты на единицу продукции.", first_line=False)
+    paragraph(doc, f"При годовой выручке {fmt(revenue, 2)} млн руб., доле переменных затрат {fmt(variable_share * 100, 1)} % и постоянных затратах {fmt(fixed_costs, 2)} млн руб. расчетная точка безубыточности в денежном выражении составляет {fmt(breakeven_revenue, 2)} млн руб.")
+    paragraph(doc, "Проект имеет запас финансовой прочности при сохранении расчетной загрузки и реализации продукции по принятым ценам. Наибольшее влияние на устойчивость оказывает стоимость молока-сырья и уровень загрузки маслоизготовителя.")
+
+
+def add_finish(doc: Document, c: dict):
+    add_struct_heading(doc, "ЗАКЛЮЧЕНИЕ")
     for text in [
-        "Производственный контроль организуют на основе программы, включающей входной контроль сырья, контроль технологических процессов, контроль санитарного состояния оборудования, лабораторный контроль готовой продукции и контроль условий хранения. Программа должна быть утверждена руководителем предприятия и актуализироваться при изменении ассортимента или технологических режимов.",
-        "На предприятии предусматривается лаборатория, оснащенная средствами измерения массовой доли жира, белка, сухих веществ, кислотности, плотности, температуры, а также оборудованием для микробиологических исследований или отбора проб для аккредитованной лаборатории. Средства измерения подлежат поверке в установленном порядке.",
-        "Система контроля строится по принципам HACCP. Для каждой операции определяют опасные факторы, предупреждающие мероприятия, критические пределы, способы мониторинга, корректирующие действия и записи. Документирование результатов является обязательным условием прослеживаемости партий.",
+        "В выпускной квалификационной работе разработан проект завода по производству масла и продуктов из пахты при переработке 60 000 кг молока в смену. Структура работы приведена в соответствие с методическими указаниями для ВКР по направлению 19.03.03.",
+        f"Продуктовый расчет показал возможность получения {fmt(c['peasant'])} кг масла крестьянского, {fmt(c['dessert'])} кг масла десертного с кофе и {fmt(c['pasteurized_bm'] + c['fermented'] + c['vanilla'])} кг продуктов из пахты в смену. Обезжиренное молоко в количестве {fmt(c['skim'])} кг/смену направляется на реализацию или смежную переработку.",
+        "Выбраны технологические схемы и режимы приемки, сепарирования, пастеризации, созревания сливок, маслоизготовления, переработки пахты, сквашивания и фасования. Подобрано основное оборудование и разработаны мероприятия производственного контроля и санитарной обработки.",
+        "Рассмотрены организация труда рабочих, оценка плана завода, безопасность жизнедеятельности и технико-экономические показатели. Проект предусматривает выполнение пяти листов графической части формата А1 в КОМПАС-3D: схема оборудования, график производственных процессов, план завода, схема санитарной обработки и экономический лист.",
     ]:
-        p(doc, text)
-    table(
-        doc,
-        "Таблица 6 - Контроль сырья и полуфабрикатов",
-        ["Объект контроля", "Показатель", "Периодичность", "Ответственный"],
-        [
-            ["Молоко-сырье", "температура, органолептика, кислотность, плотность", "каждая партия", "лаборант приемки"],
-            ["Молоко-сырье", "жир, белок, ингибирующие вещества", "каждая партия", "производственная лаборатория"],
-            ["Сливки", "массовая доля жира, кислотность", "каждая партия", "мастер, лаборант"],
-            ["Пахта", "кислотность, температура, органолептика", "каждая партия", "лаборант"],
-            ["Сахар и вкусовые компоненты", "документы качества, внешний вид", "каждая поставка", "кладовщик, лаборатория"],
-        ],
-        [4, 5, 3, 4],
-    )
-    table(
-        doc,
-        "Таблица 7 - Контроль технологических операций",
-        ["Операция", "Контролируемый параметр", "Критический предел", "Запись"],
-        [
-            ["Пастеризация сливок", "температура и выдержка", "не ниже установленного режима", "журнал пастеризации"],
-            ["Созревание сливок", "температура и продолжительность", "4-8 град. C, не менее расчетного времени", "журнал созревания"],
-            ["Маслоизготовление", "массовая доля влаги и жира", "соответствие рецептуре", "карта партии"],
-            ["Пастеризация пахты", "температура и выдержка", "не ниже 76 град. C", "журнал пастеризации"],
-            ["Сквашивание", "кислотность и температура", "достижение нормативной кислотности", "журнал сквашивания"],
-            ["Фасование", "масса нетто, герметичность, маркировка", "соответствие НД", "журнал фасования"],
-            ["Хранение", "температура камеры", "масло 0-5 град. C, напитки 2-6 град. C", "температурный лист"],
-        ],
-        [4, 5, 4, 4],
-    )
-    for text in [
-        "Для готового масла контролируют массовую долю жира, влаги, соли при ее использовании, кислотность жировой фазы, термоустойчивость, органолептические показатели, микробиологическую безопасность и массу нетто. Для продуктов из пахты контролируют массовую долю жира, белка или сухих веществ, кислотность, вязкость или консистенцию, органолептику и микробиологические показатели.",
-        "Санитарный контроль включает проверку качества мойки оборудования, концентрации моющих и дезинфицирующих растворов, температуры циркуляции, времени контакта, результатов смывов с поверхностей и состояния персонала. При неудовлетворительном результате оборудование повторно моют и дезинфицируют, а продукцию, выпущенную после сомнительной операции, блокируют до принятия решения.",
-        "На каждую партию готовой продукции оформляют производственную запись, включающую дату и время выработки, номера партий сырья, фактические режимы пастеризации, результаты лабораторного контроля, количество выпущенной продукции, сведения о таре и ответственных исполнителях.",
-    ]:
-        p(doc, text)
-
-
-def add_equipment(doc: Document, c: dict[str, float]):
-    heading(doc, "5 РАСЧЕТ И ПОДБОР ТЕХНОЛОГИЧЕСКОГО ОБОРУДОВАНИЯ", 1)
-    for text in [
-        "Подбор оборудования выполнен по расчетной сменной производительности с учетом продолжительности эффективной работы оборудования, коэффициента использования и необходимости санитарной обработки. Основные машины и аппараты выбирают таким образом, чтобы исключить накопление нестабильных полуфабрикатов и обеспечить синхронность технологических потоков.",
-        "Расчетная производительность участка приемки составляет 60 000 кг за смену. При эффективном времени приемки 6 ч часовая производительность должна быть не ниже 10 000 кг/ч. Поэтому принимается линия приемки молока производительностью 10-15 т/ч с узлом учета, фильтрации и охлаждения.",
-        "Для сепарирования требуется переработать весь объем молока за 8 ч, что соответствует 7 500 кг/ч. С учетом резерва выбран сепаратор-сливкоотделитель производительностью 10 000 л/ч. Такой резерв позволяет компенсировать остановки на переключение емкостей и колебания плотности сырья.",
-        "Емкости для сырого молока и полуфабрикатов рассчитывают исходя из сменного объема, графика поступления сырья и необходимости раздельного хранения партий. Для сырого молока предусмотрены два резервуара по 30 м3, что позволяет принимать сырье партиями и вести подготовку к переработке без смешения несоответствующих партий.",
-        "Количество резервуаров для сливок определено с учетом массы сливок "
-        + fmt(c["cream"], 1)
-        + " кг и стадии физического созревания. Принимаются три резервуара по 3 м3 с рубашками охлаждения и мешалками, что обеспечивает возможность раздельной подготовки сливок для двух видов масла и резерв под санитарную обработку.",
-    ]:
-        p(doc, text)
-    table(
-        doc,
-        "Таблица 8 - Основное технологическое оборудование",
-        ["Наименование оборудования", "Производительность или вместимость", "Количество", "Назначение"],
-        [
-            ["Линия приемки молока с узлом учета", "10-15 т/ч", "1", "приемка, фильтрация, учет"],
-            ["Пластинчатый охладитель молока", "10 т/ч", "1", "охлаждение сырья"],
-            ["Резервуар для сырого молока", "30 м3", "2", "кратковременное хранение"],
-            ["Сепаратор-сливкоотделитель", "10 000 л/ч", "1", "получение сливок и обезжиренного молока"],
-            ["Пастеризационно-охладительная установка для сливок", "3 000 кг/ч", "1", "тепловая обработка сливок"],
-            ["Резервуар созревания сливок", "3 м3", "3", "охлаждение и созревание"],
-            ["Непрерывный маслоизготовитель", "1 500 кг масла/ч", "1", "выработка масла"],
-            ["Узел подготовки рецептурных компонентов", "500 кг/ч", "1", "сахарный сироп, кофейный компонент"],
-            ["Фасовочный автомат для масла", "до 1 200 уп./ч", "2", "фасование масла"],
-            ["Емкость для пахты", "2 м3", "2", "буферное хранение"],
-            ["Пастеризационная установка для пахты", "2 000 кг/ч", "1", "тепловая обработка пахты"],
-            ["Резервуар сквашивания", "2 м3", "2", "получение кисломолочного напитка"],
-            ["Фасовочный автомат для напитков", "2 000 бут./ч", "1", "фасование пахты и напитков"],
-            ["CIP-станция", "3 контура", "1", "санитарная обработка оборудования"],
-            ["Холодильная камера масла", "расчетная вместимость 6 т", "1", "хранение масла"],
-            ["Холодильная камера напитков", "расчетная вместимость 5 т", "1", "хранение продуктов из пахты"],
-        ],
-        [5, 4, 2, 5],
-    )
-    table(
-        doc,
-        "Таблица 9 - Проверка загрузки основного оборудования",
-        ["Участок", "Расчетный объем", "Принятая производительность", "Расчетное время работы"],
-        [
-            ["Приемка молока", fmt(c["milk"], 0) + " кг", "10 000 кг/ч", "6,0 ч"],
-            ["Сепарирование", fmt(c["milk"], 0) + " кг", "10 000 кг/ч", "6,0 ч"],
-            ["Пастеризация сливок", fmt(c["cream"], 0) + " кг", "3 000 кг/ч", "2,2 ч"],
-            ["Выработка масла", fmt(c["peasant"] + c["dessert"], 0) + " кг", "1 500 кг/ч", "2,3 ч"],
-            ["Пастеризация пахты", fmt(c["buttermilk_available"], 0) + " кг", "2 000 кг/ч", "1,5 ч"],
-            ["Фасование напитков", fmt(c["buttermilk_pasteurized"] + c["fermented"] + c["vanilla"], 0) + " кг", "2 000 уп./ч", "1,5-2,0 ч"],
-        ],
-        [4, 4, 4, 4],
-    )
-    for text in [
-        "Компоновка оборудования должна обеспечивать прямоточность движения сырья: приемка и хранение молока располагаются у сырьевой рампы; далее следуют сепараторное отделение, отделение подготовки сливок, маслоцех, участок переработки пахты, фасовочные помещения и холодильные камеры готовой продукции.",
-        "Между сырыми и пастеризованными потоками предусматривается санитарный разрыв. Оборудование после пастеризации размещают в зоне повышенной чистоты. Возврат тары, мойка инвентаря и хранение вспомогательных материалов не должны пересекаться с маршрутом готовой продукции.",
-        "CIP-станция обслуживает контуры приемки и хранения молока, линию сливок и маслоизготовитель, линию пахты и напитков. Разделение контуров позволяет выбирать режим мойки с учетом вида загрязнения и сокращать расход воды и моющих средств.",
-    ]:
-        p(doc, text)
-
-
-def add_labor(doc: Document):
-    heading(doc, "6 ОРГАНИЗАЦИЯ ТРУДА", 1)
-    for text in [
-        "Организация труда проектируемого предприятия основана на разделении функций между участками приемки сырья, аппаратным отделением, маслоцехом, участком продуктов из пахты, фасовкой, складом готовой продукции, лабораторией и инженерно-техническими службами. Персонал допускается к работе после прохождения медицинского осмотра, вводного и первичного инструктажа, обучения санитарным правилам и безопасным методам работы.",
-        "В смене назначается мастер, отвечающий за выполнение производственной программы, соблюдение технологических режимов, санитарное состояние оборудования и оформление производственных записей. Лаборатория взаимодействует с мастером на всех стадиях: приемка сырья, выпуск полуфабрикатов, фасование готовой продукции и разрешение партии к отгрузке.",
-        "График работы строится так, чтобы приемка и сепарирование начинались до загрузки маслоизготовителя, а подготовка пахты следовала за получением первых партий пахты. Санитарная обработка проводится после завершения выработки каждого вида продукта и в конце смены.",
-    ]:
-        p(doc, text)
-    table(
-        doc,
-        "Таблица 10 - Расстановка персонала в смену",
-        ["Должность", "Количество, чел.", "Основные функции"],
-        [
-            ["Мастер смены", "1", "оперативное управление производством"],
-            ["Аппаратчик приемки молока", "2", "приемка, учет, охлаждение сырья"],
-            ["Аппаратчик сепарирования", "1", "сепарирование и нормализация сливок"],
-            ["Аппаратчик пастеризации", "1", "пастеризация сливок и пахты"],
-            ["Оператор маслоизготовителя", "2", "созревание сливок, выработка масла"],
-            ["Оператор рецептурного участка", "1", "подготовка сахара, кофе, ванили"],
-            ["Оператор фасования масла", "2", "фасование и маркировка масла"],
-            ["Оператор участка напитков", "2", "сквашивание и фасование продуктов из пахты"],
-            ["Лаборант", "2", "производственный контроль"],
-            ["Мойщик оборудования", "2", "CIP-мойка, санитарная обработка"],
-            ["Кладовщик готовой продукции", "1", "приемка на склад, отгрузка"],
-            ["Слесарь-наладчик", "1", "техническое обслуживание"],
-        ],
-        [5, 3, 8],
-    )
-    for text in [
-        "Численность производственного персонала в смену составляет 18 человек. Дополнительно в штат предприятия включаются инженер-технолог, начальник лаборатории, механик, энергетик, специалист по качеству, специалист по охране труда, бухгалтерия, отдел снабжения и сбыта. Их численность уточняется штатным расписанием предприятия.",
-        "Рациональная организация рабочих мест предусматривает наличие маркированного инвентаря, средств индивидуальной защиты, инструкций по эксплуатации оборудования, схем санитарной обработки, журналов учета и визуальных указателей потоков сырья и готовой продукции.",
-        "Для снижения трудоемкости предусматривается автоматизация учета массы, температуры пастеризации, времени выдержки, работы мешалок, дозирования рецептурных компонентов и регистрации параметров CIP-мойки. Оператор контролирует процесс через панель управления и подтверждает критические операции записью в журнале.",
-    ]:
-        p(doc, text)
-    table(
-        doc,
-        "Таблица 11 - Укрупненный график производственных процессов",
-        ["Операция", "0-2 ч", "2-4 ч", "4-6 ч", "6-8 ч", "После смены"],
-        [
-            ["Приемка и охлаждение молока", "выполняется", "выполняется", "выполняется", "-", "-"],
-            ["Сепарирование", "-", "выполняется", "выполняется", "выполняется", "-"],
-            ["Пастеризация и созревание сливок", "подготовка", "выполняется", "выполняется", "резерв", "-"],
-            ["Маслоизготовление", "-", "-", "выполняется", "выполняется", "-"],
-            ["Переработка пахты", "-", "-", "подготовка", "выполняется", "охлаждение"],
-            ["Фасование", "-", "подготовка", "масло", "масло и напитки", "-"],
-            ["CIP-мойка", "локально", "-", "-", "локально", "полная мойка"],
-        ],
-        [4, 2.5, 2.5, 2.5, 2.5, 3],
-    )
-
-
-def add_safety(doc: Document):
-    heading(doc, "7 БЕЗОПАСНОСТЬ ЖИЗНЕДЕЯТЕЛЬНОСТИ", 1)
-    for text in [
-        "Безопасность жизнедеятельности на молочном предприятии включает охрану труда, промышленную и пожарную безопасность, санитарную безопасность продукции, защиту окружающей среды и готовность персонала к аварийным ситуациям. Ответственность за организацию системы распределяется между руководителем предприятия, специалистом по охране труда, мастерами участков и работниками инженерных служб.",
-        "Основными опасными и вредными производственными факторами являются движущиеся части оборудования, горячие поверхности пастеризационных установок, пар и горячая вода, химические моющие и дезинфицирующие средства, скользкие полы, шум насосов и компрессоров, низкие температуры холодильных камер, электрическое оборудование и физические нагрузки при работе с тарой.",
-        "Для снижения риска травматизма оборудование оснащают защитными кожухами, блокировками, аварийными кнопками остановки, заземлением и предупредительной маркировкой. Работники используют санитарную одежду, нескользящую обувь, перчатки, защитные очки или щитки при работе с химическими растворами.",
-        "Помещения должны иметь приточно-вытяжную вентиляцию, достаточное освещение, водонепроницаемые полы с уклоном к трапам, моющиеся стены, зонирование чистых и условно грязных участков. Температурно-влажностный режим поддерживается с учетом требований технологии и условий труда.",
-    ]:
-        p(doc, text)
-    table(
-        doc,
-        "Таблица 12 - Мероприятия по снижению производственных рисков",
-        ["Фактор риска", "Возможные последствия", "Мероприятия"],
-        [
-            ["Горячая вода и пар", "ожоги", "теплоизоляция, предупреждающие знаки, инструкции"],
-            ["Щелочные и кислотные моющие растворы", "химические ожоги", "СИЗ, дозирующие станции, обучение"],
-            ["Вращающиеся узлы оборудования", "механические травмы", "кожухи, блокировки, запрет работы при снятой защите"],
-            ["Скользкие полы", "падения", "уклоны, трапы, уборка проливов, нескользящая обувь"],
-            ["Холодильные камеры", "переохлаждение, блокировка персонала", "теплая спецодежда, аварийное открывание дверей"],
-            ["Электрооборудование во влажной среде", "поражение током", "заземление, УЗО, регламентный осмотр"],
-            ["Шум", "утомление, снижение слуха", "шумоглушение, техническое обслуживание, СИЗ при необходимости"],
-        ],
-        [4, 4, 8],
-    )
-    for text in [
-        "Пожарная безопасность обеспечивается применением негорючих и трудногорючих материалов, исправностью электрооборудования, наличием автоматической пожарной сигнализации, первичных средств пожаротушения, свободных эвакуационных выходов и обучением персонала действиям при пожаре.",
-        "Экологическая безопасность связана прежде всего с обращением со сточными водами, отходами упаковки, остатками моющих растворов и некондиционной продукцией. Сточные воды молочного предприятия содержат органические вещества, жир, белок, лактозу и моющие компоненты, поэтому перед сбросом они направляются на локальные очистные сооружения.",
-        "Для снижения нагрузки на очистные сооружения предусматривают сухую уборку остатков продукта перед мойкой, возврат первых ополосков в переработку там, где это допустимо, раздельный сбор концентрированных растворов, контроль pH сточных вод и плановую профилактику утечек.",
-        "Санитарная безопасность персонала поддерживается системой санитарных пропускников, разделением бытовой и санитарной одежды, регулярной мойкой и дезинфекцией рук, запретом работы при признаках инфекционных заболеваний и контролем соблюдения правил личной гигиены.",
-    ]:
-        p(doc, text)
-
-
-def add_economics(doc: Document, c: dict[str, float]):
-    heading(doc, "8 ТЕХНИКО-ЭКОНОМИЧЕСКАЯ ОЦЕНКА ПРОЕКТА", 1)
-    peasant_price = 820
-    dessert_price = 920
-    buttermilk_price = 75
-    fermented_price = 95
-    vanilla_price = 105
-    skim_price = 22
-    milk_price = 38
-    work_days = 250
-    revenue_day = (
-        c["peasant"] * peasant_price
-        + c["dessert"] * dessert_price
-        + c["buttermilk_pasteurized"] * buttermilk_price
-        + c["fermented"] * fermented_price
-        + c["vanilla"] * vanilla_price
-        + c["skim"] * skim_price
-    )
-    revenue_year = revenue_day * work_days
-    raw_milk_cost_year = c["milk"] * milk_price * work_days
-    packaging_year = 52_000_000
-    materials_year = 28_000_000
-    energy_year = 34_000_000
-    payroll_year = 72_000_000
-    depreciation_year = 36_000_000
-    overhead_year = 62_000_000
-    total_cost = raw_milk_cost_year + packaging_year + materials_year + energy_year + payroll_year + depreciation_year + overhead_year
-    profit_before_tax = revenue_year - total_cost
-    tax = max(profit_before_tax, 0) * 0.20
-    net_profit = profit_before_tax - tax
-    investment = 495_000_000
-    payback = investment / net_profit if net_profit > 0 else 0
-    for text in [
-        "Технико-экономическая оценка выполнена для проверки жизнеспособности проектного решения. Расчеты приведены в ценах учебного проекта и должны уточняться при разработке бизнес-плана с учетом фактических коммерческих предложений на оборудование, тарифов, налогового режима и договорных цен на сырье.",
-        "Доходную часть формируют масло крестьянское, масло десертное с кофе, продукты из пахты и обезжиренное молоко, реализуемое как полуфабрикат. Учет реализации обезжиренного молока принципиально важен, поскольку при производстве масла из цельного молока образуется значительный поток белково-углеводной фракции.",
-        "Себестоимость продукции включает стоимость сырого молока, рецептурных компонентов, упаковочных материалов, энергоресурсов, заработной платы, отчислений, ремонта, санитарной обработки, лабораторного контроля, амортизации и общехозяйственных расходов.",
-    ]:
-        p(doc, text)
-    table(
-        doc,
-        "Таблица 13 - Расчет выручки за смену",
-        ["Продукт", "Количество, кг", "Цена, руб./кг", "Выручка, тыс. руб."],
-        [
-            ["Масло крестьянское", fmt(c["peasant"], 1), str(peasant_price), fmt(c["peasant"] * peasant_price / 1000, 1)],
-            ["Масло десертное с кофе", fmt(c["dessert"], 1), str(dessert_price), fmt(c["dessert"] * dessert_price / 1000, 1)],
-            ["Пахта пастеризованная", fmt(c["buttermilk_pasteurized"], 1), str(buttermilk_price), fmt(c["buttermilk_pasteurized"] * buttermilk_price / 1000, 1)],
-            ["Кисломолочный напиток из пахты с сахаром", fmt(c["fermented"], 1), str(fermented_price), fmt(c["fermented"] * fermented_price / 1000, 1)],
-            ["Напиток из пахты с ванилью", fmt(c["vanilla"], 1), str(vanilla_price), fmt(c["vanilla"] * vanilla_price / 1000, 1)],
-            ["Обезжиренное молоко", fmt(c["skim"], 1), str(skim_price), fmt(c["skim"] * skim_price / 1000, 1)],
-            ["Итого", "-", "-", fmt(revenue_day / 1000, 1)],
-        ],
-        [6, 3, 3, 4],
-    )
-    table(
-        doc,
-        "Таблица 14 - Укрупненная смета капитальных вложений",
-        ["Статья", "Сумма, млн руб.", "Доля, %"],
-        [
-            ["Строительно-монтажные работы", "245", "49,5"],
-            ["Технологическое оборудование", "165", "33,3"],
-            ["Холодоснабжение, энергетика, вентиляция", "38", "7,7"],
-            ["Лаборатория, автоматика, производственный инвентарь", "17", "3,4"],
-            ["Проектные, пусконаладочные и прочие затраты", "30", "6,1"],
-            ["Итого капитальные вложения", "495", "100,0"],
-        ],
-        [7, 4, 4],
-    )
-    table(
-        doc,
-        "Таблица 15 - Годовые текущие затраты",
-        ["Статья затрат", "Сумма, млн руб./год"],
-        [
-            ["Сырое молоко", fmt(raw_milk_cost_year / 1_000_000, 1)],
-            ["Упаковочные материалы", fmt(packaging_year / 1_000_000, 1)],
-            ["Сахар, кофе, ваниль, закваски и вспомогательные материалы", fmt(materials_year / 1_000_000, 1)],
-            ["Электроэнергия, тепло, холод, вода", fmt(energy_year / 1_000_000, 1)],
-            ["Фонд оплаты труда с отчислениями", fmt(payroll_year / 1_000_000, 1)],
-            ["Амортизация", fmt(depreciation_year / 1_000_000, 1)],
-            ["Ремонт, лаборатория, логистика и общехозяйственные расходы", fmt(overhead_year / 1_000_000, 1)],
-            ["Итого", fmt(total_cost / 1_000_000, 1)],
-        ],
-        [10, 5],
-    )
-    table(
-        doc,
-        "Таблица 16 - Основные технико-экономические показатели",
-        ["Показатель", "Значение"],
-        [
-            ["Переработка молока", fmt(c["milk"], 0) + " кг/смену"],
-            ["Выпуск масла", fmt(c["peasant"] + c["dessert"], 1) + " кг/смену"],
-            ["Выпуск продуктов из пахты", fmt(c["buttermilk_pasteurized"] + c["fermented"] + c["vanilla"], 1) + " кг/смену"],
-            ["Годовая выручка", fmt(revenue_year / 1_000_000, 1) + " млн руб."],
-            ["Годовые текущие затраты", fmt(total_cost / 1_000_000, 1) + " млн руб."],
-            ["Прибыль до налогообложения", fmt(profit_before_tax / 1_000_000, 1) + " млн руб."],
-            ["Чистая прибыль", fmt(net_profit / 1_000_000, 1) + " млн руб."],
-            ["Капитальные вложения", fmt(investment / 1_000_000, 1) + " млн руб."],
-            ["Простой срок окупаемости", fmt(payback, 2) + " года"],
-            ["Рентабельность продаж по чистой прибыли", fmt(net_profit / revenue_year * 100, 1) + " %"],
-        ],
-        [9, 6],
-    )
-    for text in [
-        "Полученные показатели подтверждают экономическую целесообразность проекта при условии стабильной загрузки мощности, реализации обезжиренного молока и сохранения расчетного уровня цен. Наибольшее влияние на результат оказывает цена сырого молока; поэтому предприятию необходимо заключать долгосрочные договоры с поставщиками и стимулировать качество сырья.",
-        "Дополнительный резерв повышения эффективности связан с расширением ассортимента продуктов из обезжиренного молока, оптимизацией упаковки, снижением удельного расхода тепла за счет регенерации в пластинчатых установках и сокращением потерь при фасовании.",
-    ]:
-        p(doc, text)
-
-
-def add_conclusion(doc: Document):
-    heading(doc, "ЗАКЛЮЧЕНИЕ", 1)
-    conclusions = [
-        "В выпускной квалификационной работе разработан проект завода по производству масла и продуктов из пахты при переработке 60 000 кг молока в смену. Проект учитывает заданный ассортимент, требования к рациональному использованию сырья и необходимость санитарно надежной организации производства.",
-        "Выполнено технико-экономическое обоснование, показавшее целесообразность выпуска масла как основного высокомаржинального продукта и продуктов из пахты как направления комплексной переработки вторичного молочного сырья.",
-        "Продуктовый расчет показал, что из заданного объема молока получают около 6,44 т сливок 35 %-ной жирности, 53,56 т обезжиренного молока, 2,32 т масла крестьянского, 1,08 т масла десертного с кофе и около 3,04 т продуктов из пахты в смену.",
-        "Подобраны технологические режимы приемки, сепарирования, пастеризации, созревания сливок, маслоизготовления, переработки пахты, сквашивания и фасования. Режимы направлены на обеспечение безопасности продукции, стабильной структуры масла и сохранение пищевой ценности пахты.",
-        "Сформирован перечень основного оборудования: линия приемки, сепаратор, пастеризационные установки, резервуары созревания сливок, непрерывный маслоизготовитель, оборудование подготовки рецептурных компонентов, фасовочные автоматы, резервуары пахты, CIP-станция и холодильные камеры.",
-        "Разработана система производственного контроля, включающая входной контроль сырья, мониторинг критических технологических параметров, лабораторный контроль готовой продукции, санитарный контроль оборудования и документирование партий.",
-        "Определена сменная расстановка персонала и рассмотрены вопросы охраны труда, пожарной безопасности, санитарной безопасности и охраны окружающей среды. Предусмотрены мероприятия по снижению рисков при работе с горячими средами, моющими растворами, движущимися механизмами и холодильными камерами.",
-        "Технико-экономическая оценка показала, что при принятых учебных ценах проект обеспечивает положительный финансовый результат и приемлемый срок окупаемости. Детализация показателей должна выполняться на стадии бизнес-планирования с учетом фактических коммерческих предложений и региональных условий.",
-    ]
-    for text in conclusions:
-        p(doc, text)
-
-
-def add_references(doc: Document):
-    heading(doc, "СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ", 1)
+        paragraph(doc, text)
+    add_struct_heading(doc, "СПИСОК СОКРАЩЕНИЙ")
+    add_table(doc, "Таблица 28 – Список сокращений", ["Сокращение", "Расшифровка"], [
+        ["ВКР", "выпускная квалификационная работа"],
+        ["ЕСКД", "единая система конструкторской документации"],
+        ["КМАФАнМ", "количество мезофильных аэробных и факультативно-анаэробных микроорганизмов"],
+        ["ОВПФ", "опасные и вредные производственные факторы"],
+        ["СИП", "санитарная безразборная циркуляционная мойка"],
+        ["СТО", "стандарт организации"],
+        ["ТР ТС", "технический регламент Таможенного союза"],
+        ["ХАССП", "система анализа опасностей и критических контрольных точек"],
+    ])
+    add_struct_heading(doc, "СПИСОК ЛИТЕРАТУРНЫХ ИСТОЧНИКОВ")
     refs = [
         "ТР ТС 021/2011. О безопасности пищевой продукции.",
         "ТР ТС 022/2011. Пищевая продукция в части ее маркировки.",
-        "ТР ТС 029/2012. Требования безопасности пищевых добавок, ароматизаторов и технологических вспомогательных средств.",
         "ТР ТС 033/2013. О безопасности молока и молочной продукции.",
-        "ГОСТ 2.105-2019. Единая система конструкторской документации. Общие требования к текстовым документам.",
-        "ГОСТ 7.32-2017. Система стандартов по информации, библиотечному и издательскому делу. Отчет о научно-исследовательской работе. Структура и правила оформления.",
-        "ГОСТ Р 7.0.100-2018. Библиографическая запись. Библиографическое описание. Общие требования и правила составления.",
+        "СТО ФГБОУ ВО Вологодская ГМХА 1.1-2022. Документы текстовые учебные. Общие требования к построению, изложению и оформлению учебных документов. Вологда-Молочное, 2022.",
+        "Выпускная квалификационная работа: методические указания / сост. Н.Г. Острецова, Г.Н. Забегалова, Н.В. Фатеева, И.В. Литвинов. Вологда-Молочное: ФГБОУ ВО Вологодская ГМХА, 2022. 85 с.",
         "ГОСТ 32261-2013. Масло сливочное. Технические условия.",
         "ГОСТ 34354-2017. Молоко сырое коровье. Технические условия.",
         "ГОСТ 3624-92. Молоко и молочные продукты. Титриметрические методы определения кислотности.",
-        "ГОСТ 5867-90. Молоко и молочные продукты. Методы определения жира.",
         "ГОСТ 3625-84. Молоко и молочные продукты. Методы определения плотности.",
+        "ГОСТ 5867-90. Молоко и молочные продукты. Методы определения жира.",
         "ГОСТ 9225-84. Молоко и молочные продукты. Методы микробиологического анализа.",
-        "Санитарные правила и нормы, устанавливающие требования к организациям пищевой промышленности и обороту пищевой продукции.",
-        "Нормы технологического проектирования предприятий молочной промышленности.",
-        "Крусь Г.Н., Храмцов А.Г., Волокитина З.В. Технология молока и молочных продуктов. Москва: КолосС.",
-        "Твердохлеб Г.В., Диланян З.Х., Чекулаева Л.В. Технология молока и молочных продуктов. Москва: Агропромиздат.",
-        "Шалыгина А.М., Калинина Л.В. Общая технология молока и молочных продуктов. Москва: КолосС.",
-        "Храмцов А.Г. Вторичное молочное сырье: переработка и использование. Санкт-Петербург: Профессия.",
+        "ГОСТ Р 7.0.100-2018. Библиографическая запись. Библиографическое описание.",
+        "Нормы технологического проектирования предприятий молочной промышленности ВНТП 645/1618-92.",
+        "Инструкция по санитарной обработке оборудования, инвентаря и тары на предприятиях молочной промышленности. Москва, 1998.",
+        "Организация и проведение производственного контроля на молокоперерабатывающих предприятиях: методические рекомендации. Санкт-Петербург: ГИОРД, 2010.",
+        "Крусь, Г.Н. Технология молока и молочных продуктов / Г.Н. Крусь, А.Г. Храмцов, З.В. Волокитина. Москва: КолосС.",
+        "Твердохлеб, Г.В. Технология молока и молочных продуктов / Г.В. Твердохлеб, З.Х. Диланян, Л.В. Чекулаева. Москва: Агропромиздат.",
+        "Шалыгина, А.М. Общая технология молока и молочных продуктов / А.М. Шалыгина, Л.В. Калинина. Москва: КолосС.",
+        "Храмцов, А.Г. Вторичное молочное сырье: переработка и использование. Санкт-Петербург: Профессия.",
         "Справочник технолога молочного производства. Технология и рецептуры. Санкт-Петербург: ГИОРД.",
-        "Методические указания по выполнению выпускных квалификационных работ для обучающихся направления технологии молока и молочных продуктов.",
-        "Паспорта и каталоги оборудования для приемки молока, сепарирования, пастеризации, маслоизготовления, фасования и CIP-мойки.",
+        "Технологическое оборудование предприятий молочной промышленности. Часть 2: методические указания / сост. А.А. Кузин, В.С. Кузнецова. Вологда-Молочное: ИЦ ВГМХА, 2010.",
+        "Кузнецова, В.С. Основы проектирования предприятий пищевой отрасли: практикум. Вологда-Молочное: ИЦ ВГМХА, 2013.",
+        "Кузнецова, В.С. Технологическое оборудование молочной отрасли: установочные чертежи: методические указания / В.С. Кузнецова, В.А. Шохалов, А.В. Кузьмин. Вологда-Молочное: ВГМХА, 2014.",
+        "Данилова, Е.В. Системы централизованной мойки предприятий молочной промышленности: методические указания / Е.В. Данилова, Е.М. Костюков. Вологда-Молочное: ВГМХА, 2015.",
+        "Тимошенко, Н.В. Проектирование, строительство и инженерное оборудование предприятий молочной промышленности. Санкт-Петербург: Лань, 2015.",
+        "Бурашников, Ю.М. Безопасность жизнедеятельности. Охрана труда на предприятиях пищевых производств / Ю.М. Бурашников, А.С. Максимов. Санкт-Петербург: ГИОРД, 2007.",
+        "Маслова, В.М. Безопасность жизнедеятельности: учебное пособие / В.М. Маслова, И.В. Кохова, В.Г. Ляшко. Москва: Вузовский учебник; ИНФРА-М, 2015.",
+        "Бронникова, Т.С. Разработка бизнес-плана проекта: учебное пособие. Москва: Альфа-М; ИНФРА-М, 2014.",
+        "Экономика, организация, основы маркетинга в перерабатывающей промышленности: учебное пособие / под ред. Е.В. Савватеева. Москва: ИНФРА-М, 2014.",
+        "Магомедов, М.Д. Экономика и организация производства. Пищевая промышленность. Санкт-Петербург: РАПП, 2008.",
+        "Доктрина продовольственной безопасности Российской Федерации.",
+        "Стратегия повышения качества пищевой продукции в Российской Федерации до 2030 года.",
+        "ИТС НДТ 45-2017. Производство напитков, молока и молочной продукции. Москва: Бюро НДТ, 2017.",
+        "Единый тарифно-квалификационный справочник работ и профессий рабочих. Выпуск 49. Маслодельное, сыродельное и молочное производства.",
+        "Каталоги технологического оборудования для молочной промышленности: линии приемки, сепараторы, пастеризаторы, маслоизготовители, фасовочные автоматы, CIP-станции.",
     ]
     for idx, ref in enumerate(refs, 1):
-        paragraph = doc.add_paragraph()
-        paragraph.paragraph_format.first_line_indent = Cm(0)
-        paragraph.paragraph_format.left_indent = Cm(0)
-        paragraph.paragraph_format.line_spacing = 1.5
-        run = paragraph.add_run(f"{idx}. {ref}")
-        run.font.name = "Times New Roman"
-        run.font.size = Pt(14)
+        paragraph(doc, f"{idx}. {ref}", first_line=False)
+    paragraph(doc, "Дата написания работы «____» ______________ 2026 г.", first_line=False)
+    paragraph(doc, "Студент ______________ /Худойкулзода Ш.М./", first_line=False)
+    add_struct_heading(doc, "ПРИЛОЖЕНИЯ")
+    add_heading(doc, "ПРИЛОЖЕНИЕ А", 1)
+    add_heading(doc, "Ведомость графической части, выполняемой в КОМПАС-3D", 2)
+    paragraph(doc, "Графическая часть ВКР выполняется отдельными чертежами формата А1 в программе КОМПАС-3D в соответствии с требованиями ЕСКД и СТО Вологодская ГМХА к демонстрационным материалам. В текстовую часть включается только ведомость листов и спецификация для последующего выполнения чертежей.")
+    add_table(doc, "Таблица А.1 – Ведомость листов графической части", ["Лист", "Наименование чертежа", "Формат", "Программа выполнения"], [
+        ["1", "Схема оборудования линии производства масла и продуктов из пахты", "А1", "КОМПАС-3D"],
+        ["2", "График производственных процессов", "А1", "КОМПАС-3D"],
+        ["3", "План завода с расстановкой оборудования", "А1", "КОМПАС-3D"],
+        ["4", "Схема санитарной обработки линии по производству сливочного масла", "А1", "КОМПАС-3D"],
+        ["5", "Экономический чертеж", "А1", "КОМПАС-3D"],
+    ])
+    add_heading(doc, "ПРИЛОЖЕНИЕ Б", 1)
+    add_heading(doc, "Спецификация основного оборудования для графической части", 2)
+    add_table(doc, "Таблица Б.1 – Спецификация оборудования", ["Позиция", "Наименование", "Количество"], [
+        ["1", "Линия приемки молока", "1"],
+        ["2", "Резервуар сырого молока 30 м3", "2"],
+        ["3", "Сепаратор-сливкоотделитель", "1"],
+        ["4", "Пастеризационно-охладительная установка сливок", "1"],
+        ["5", "Резервуар созревания сливок 3 м3", "3"],
+        ["6", "Непрерывный маслоизготовитель", "1"],
+        ["7", "Фасовочный автомат масла", "2"],
+        ["8", "Пастеризатор пахты", "1"],
+        ["9", "Резервуар сквашивания", "2"],
+        ["10", "CIP-станция", "1"],
+    ])
 
 
-def add_appendices(doc: Document):
-    heading(doc, "ПРИЛОЖЕНИЕ А", 1)
-    heading(doc, "Схема оборудования линии производства масла и продуктов из пахты", 2)
-    for text in [
-        "Графический лист А1 рекомендуется выполнить в виде аппаратурно-технологической схемы. На схеме следует показать приемную линию молока, резервуары сырого молока, сепаратор, пастеризационную установку сливок, резервуары созревания, маслоизготовитель, узел подготовки рецептурных компонентов, фасовочные автоматы, емкости пахты, пастеризационную установку пахты, резервуары сквашивания, фасование напитков, CIP-станцию и холодильные камеры.",
-        "На линиях движения продукта необходимо указать направление потоков: молоко, сливки, обезжиренное молоко, масло, пахта, сахарный сироп, кофейный компонент, ванильный компонент, моющие растворы и вода. Оборудование маркируется позиционными обозначениями, которые должны соответствовать спецификации на листе.",
-    ]:
-        p(doc, text)
-    heading(doc, "ПРИЛОЖЕНИЕ Б", 1)
-    heading(doc, "График производственных процессов", 2)
-    for text in [
-        "Графический лист А1 рекомендуется выполнить в форме линейного графика Гантта по смене. По горизонтали откладывают время смены, по вертикали - операции и оборудование. В графике отражают приемку молока, сепарирование, пастеризацию сливок, созревание, маслоизготовление, подготовку пахты, пастеризацию, сквашивание, фасование, охлаждение, хранение и CIP-мойку.",
-        "На графике необходимо показать занятость основных операторов и моменты лабораторного контроля. Это позволит согласовать технологический процесс с организацией труда и проверить отсутствие конфликтов по оборудованию.",
-    ]:
-        p(doc, text)
-    heading(doc, "ПРИЛОЖЕНИЕ В", 1)
-    heading(doc, "План завода с расстановкой оборудования", 2)
-    for text in [
-        "План производственного корпуса должен предусматривать сырьевую рампу, приемное отделение, аппаратное отделение, маслоцех, участок продуктов из пахты, фасовочные помещения, камеры готовой продукции, склад тары, моечные, лабораторию, бытовые помещения и технические зоны. Потоки сырья и готовой продукции должны быть разведены.",
-        "При расстановке оборудования учитывают зоны обслуживания, проходы для персонала, возможность демонтажа узлов при ремонте, подвод воды, пара, холода, электроэнергии, сжатого воздуха и канализации. Оборудование после пастеризации размещают в зоне повышенной санитарной чистоты.",
-    ]:
-        p(doc, text)
-    heading(doc, "ПРИЛОЖЕНИЕ Г", 1)
-    heading(doc, "Схема санитарной обработки линии производства сливочного масла", 2)
-    for text in [
-        "Схема санитарной обработки должна включать предварительное ополаскивание теплой водой, циркуляцию щелочного раствора, промежуточное ополаскивание, циркуляцию кислотного раствора при необходимости, заключительное ополаскивание питьевой водой и дезинфекцию. Для каждого контура указывают концентрацию раствора, температуру, продолжительность и направление циркуляции.",
-        "Особое внимание уделяют маслоизготовителю, трубопроводам сливок, резервуарам созревания, насосам, клапанным блокам и фасовочным узлам. После мойки контролируют отсутствие остатков моющих средств и качество санитарной обработки по смывам.",
-    ]:
-        p(doc, text)
-    heading(doc, "ПРИЛОЖЕНИЕ Д", 1)
-    heading(doc, "Экономический чертеж", 2)
-    for text in [
-        "Экономический лист А1 рекомендуется выполнить в виде сводной инфографики проекта: структура капитальных вложений, структура себестоимости, выпуск продукции за смену, годовая выручка, чистая прибыль, рентабельность продаж и срок окупаемости. Для наглядности допускается использовать диаграммы и таблицы.",
-        "Показатели экономического листа должны соответствовать расчетам раздела 8. При изменении цен или объемов выпуска требуется синхронно обновить таблицы технико-экономической оценки и графический лист.",
-    ]:
-        p(doc, text)
-
-
-def normalize_document_fonts(doc: Document):
-    for paragraph in doc.paragraphs:
-        for run in paragraph.runs:
-            run.font.name = "Times New Roman"
-            if run.font.size is None:
-                run.font.size = Pt(14)
+def normalize(doc: Document):
+    for par in doc.paragraphs:
+        for run in par.runs:
+            if run.font.name is None:
+                set_run(run)
     for tbl in doc.tables:
         for row in tbl.rows:
             for cell in row.cells:
-                for paragraph in cell.paragraphs:
-                    paragraph.paragraph_format.first_line_indent = Cm(0)
-                    for run in paragraph.runs:
-                        run.font.name = "Times New Roman"
-                        if run.font.size is None:
-                            run.font.size = Pt(12)
+                for par in cell.paragraphs:
+                    par.paragraph_format.line_spacing = 1.0
+                    par.paragraph_format.first_line_indent = Cm(0)
+                    for run in par.runs:
+                        if run.font.name is None:
+                            set_run(run, 12)
 
 
 def main():
     OUT_DIR.mkdir(exist_ok=True)
     doc = Document()
-    set_doc_defaults(doc)
+    set_defaults(doc)
     c = calculations()
     add_title_page(doc)
-    add_abstract(doc)
+    add_assignment_and_calendar(doc)
+    begin_numbered_part(doc)
+    add_abstract(doc, c)
     add_toc(doc)
     add_intro(doc)
-    add_teo(doc, c)
+    add_section_1(doc)
     add_product_calculation(doc, c)
-    add_technology(doc)
-    add_control(doc)
-    add_equipment(doc, c)
-    add_labor(doc)
-    add_safety(doc)
-    add_economics(doc, c)
-    add_conclusion(doc)
-    add_references(doc)
-    add_appendices(doc)
-    normalize_document_fonts(doc)
+    add_technology_sections(doc)
+    add_control_equipment_labor(doc, c)
+    add_plan_safety_economics(doc, c)
+    add_finish(doc, c)
+    normalize(doc)
     doc.core_properties.title = "Проект завода по производству масла и продуктов из пахты"
     doc.core_properties.subject = "Выпускная квалификационная работа"
-    doc.core_properties.author = "Худойкулзода Ш.М."
-    doc.core_properties.keywords = "масло, пахта, молочная промышленность, ВКР, ГОСТ"
+    doc.core_properties.author = "Худойкулзода Шерали Мухаммади"
+    doc.core_properties.keywords = "ВКР, СТО Вологодская ГМХА 1.1-2022, масло, пахта"
     doc.save(OUT_FILE)
     print(f"Created {OUT_FILE}")
 

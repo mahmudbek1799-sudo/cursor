@@ -5,48 +5,54 @@
 ВоГУ, 2026 г.).
 
 Бот выполняет обязанности администратора сайта мебельного магазина:
-принимает заказы с сайта, уведомляет администратора, ведёт каталог
-заказов, меняет их статус, отправляет сообщения клиентам, ведёт чёрный
-список, формирует аналитические дашборды и журнал действий.
+принимает заказы с сайта (REST API или парсинг HTML без API), уведомляет
+администратора, ведёт каталог товаров (CRUD), систему скидок, чёрный
+список, формирует аналитические дашборды, экспортирует заказы в .docx
+и журналирует все действия администратора.
 
-## Технологический стек
+## Технологический стек (строго по ТЗ)
 
-| Назначение        | Технология              |
-|-------------------|-------------------------|
-| Язык              | Python 3.11+            |
-| Telegram          | aiogram 3.x (асинхронный) |
-| База данных       | SQLite (aiosqlite)      |
-| Аналитика         | Matplotlib              |
-| Парсинг сайта     | aiohttp + BeautifulSoup4 |
-| Документация ВКР  | python-docx             |
-| Контроль версий   | Git                     |
+| Назначение         | Технология                  |
+|--------------------|------------------------------|
+| Язык               | Python 3.11+                 |
+| Telegram           | pyTelegramBotAPI (telebot)   |
+| База данных        | SQLite (модуль `sqlite3`)    |
+| Аналитика          | Matplotlib                   |
+| Парсинг сайта      | Requests + BeautifulSoup4    |
+| Экспорт документов | python-docx                  |
+| Прокси             | PySocks (SOCKS5)             |
+| Контроль версий    | Git                          |
 
 ## Структура проекта
 
 ```
 .
 ├── bot/
-│   ├── config.py              # настройки из .env (Pydantic Settings)
-│   ├── main.py                # точка входа (asyncio + aiogram Dispatcher)
-│   ├── database/db.py         # асинхронный слой SQLite (orders, products,
-│   │                            discounts, clients, blocked_users, admin_actions)
-│   ├── keyboards/admin.py     # reply- и inline-клавиатуры
-│   ├── middlewares/access.py  # контроль доступа администратора
-│   ├── handlers/              # common, orders, products, discounts,
-│   │                            stats, users, broadcast, sync_cmd
-│   ├── services/
-│   │   ├── shop_api.py        # ShopAPIClient (REST) + HTMLShopParser (без API)
-│   │   │                        + MockShopAPI (демо)
-│   │   ├── sync.py            # фоновая синхронизация заказов и каталога
-│   │   └── analytics.py       # дашборды на Matplotlib
-│   └── utils/                 # логирование, форматирование (orders + products)
+│   ├── config.py              # настройки из .env (os.getenv)
+│   ├── main.py                # точка входа (polling, SOCKS5)
+│   ├── database.py            # синхронный слой SQLite
+│   ├── keyboards.py           # ReplyKeyboardMarkup, InlineKeyboardMarkup
+│   ├── utils.py               # admin_only декоратор, форматирование
+│   ├── export_docx.py         # экспорт заказов в .docx (python-docx)
+│   ├── handlers/
+│   │   ├── common.py          # /start, /help
+│   │   ├── orders.py          # заказы, статусы, чат с клиентом
+│   │   ├── products.py        # CRUD каталога товаров
+│   │   ├── discounts.py       # скидки (процент / фикс, на товар / глобально)
+│   │   ├── stats.py           # /stats, /dashboard
+│   │   ├── users.py           # чёрный список, журнал
+│   │   ├── broadcast.py       # /send, /send_all
+│   │   ├── sync.py            # /sync, /parse_site
+│   │   └── export.py          # /export → .docx
+│   └── services/
+│       ├── shop_api.py        # ShopAPIClient | HTMLShopParser | MockShopAPI
+│       ├── sync.py            # фоновая синхронизация (threading.Thread)
+│       └── analytics.py       # дашборды на Matplotlib
 ├── scripts/
-│   ├── seed_demo.py           # наполнение БД демо-данными (заказы, товары, скидки)
-│   ├── build_vkr.py           # сборка пояснительной записки ВКР по ГОСТ
-│   └── build_otchet.py        # сборка отчёта по проектно-технологической практике
+│   ├── seed_demo.py           # наполнение БД демо-данными
+│   └── build_vkr.py           # сборка .docx ВКР по ГОСТ
 ├── docs/
-│   ├── Gafurov_VKR.docx
-│   └── Gafurov_Otchet_PTP.docx
+│   └── Gafurov_VKR.docx
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -68,22 +74,30 @@ pip install -r requirements.txt
 ## Настройка
 
 1. Получите токен у [@BotFather](https://t.me/BotFather).
-2. Узнайте свой Telegram-ID у [@userinfobot](https://t.me/userinfobot).
-3. Скопируйте `.env.example` в `.env` и заполните значения:
-
-```bash
-cp .env.example .env
-```
+2. Узнайте свой Telegram ID у [@userinfobot](https://t.me/userinfobot).
+3. Скопируйте `.env.example` в `.env` и заполните:
 
 ```ini
 BOT_TOKEN=123456:AA...
 ADMIN_IDS=111111111,222222222
 DB_PATH=data/furniture_bot.sqlite3
-SHOP_API_URL=https://shop.example.com/api/orders
-SHOP_API_TOKEN=secret
-SYNC_INTERVAL=60
-LOG_LEVEL=INFO
+
+# Источник данных сайта: mock | api | html
+SHOP_SOURCE=mock
+
+# === SOCKS5-прокси (на случай блокировок Telegram в РФ) ===
+PROXY_HOST=
+PROXY_PORT=1080
+PROXY_USER=
+PROXY_PASSWORD=
 ```
+
+### Работа через SOCKS5-прокси
+
+В условиях периодических ограничений работы Telegram на территории РФ
+бот поддерживает подключение через SOCKS5-прокси. Достаточно указать
+`PROXY_HOST` и `PROXY_PORT` в `.env` — бот автоматически направит весь
+трафик к Telegram через прокси (используется `telebot.apihelper.proxy`).
 
 ## Запуск
 
@@ -91,34 +105,19 @@ LOG_LEVEL=INFO
 python -m bot.main
 ```
 
-При первом запуске будет создана БД `data/furniture_bot.sqlite3`, в
-консоль и в файл `logs/bot.log` начнёт выводиться диагностика. После
-этого администратор пишет боту `/start`.
-
 ## Демонстрационные данные
-
-Чтобы наполнить БД фиктивными заказами и клиентами (полезно для
-демонстрации статистики и дашбордов):
 
 ```bash
 python scripts/seed_demo.py
 ```
 
-## Сборка пояснительной записки ВКР
+Создаёт 60 заказов, 8 товаров и 2 скидки.
 
-Для сборки `docs/Gafurov_VKR.docx` (ГОСТ, Times New Roman 14, поля 30/15/20/20,
-полуторный интервал, автоматическое содержание):
+## Сборка пояснительной записки ВКР
 
 ```bash
 python scripts/build_vkr.py
-```
-
-## Сборка отчёта по проектно-технологической практике
-
-Для сборки `docs/Gafurov_Otchet_PTP.docx` (типовой формат отчёта по ПТП ВоГУ):
-
-```bash
-python scripts/build_otchet.py
+# → docs/Gafurov_VKR.docx
 ```
 
 ## Команды бота
@@ -130,115 +129,46 @@ python scripts/build_otchet.py
 | `/order <id>` или `/order_<id>` | Карточка заказа |
 | `/sync` | Принудительный приём заказов с сайта |
 | `/parse_site` | Парсинг каталога сайта без API |
+| `/export` | Экспорт заказов в .docx |
 
 ### Товары
 | Команда | Назначение |
 |---------|------------|
 | `/products` | Каталог товаров с пагинацией |
 | `/product <id|sku>` | Карточка товара |
-| `/add_product` | Мастер добавления товара (FSM) |
+| `/add_product` | Мастер добавления товара |
 | `/del_product <id|sku>` | Удалить товар |
 | `/price <id|sku> <цена>` | Изменить цену |
 
 ### Скидки
 | Команда | Назначение |
 |---------|------------|
-| `/discounts` | Список активных скидок |
+| `/discounts` | Активные скидки |
 | `/discount <sku|id|all> <percent|fixed> <значение> [дней]` | Создать скидку |
 
 Примеры:
 - `/discount all percent 10 7` — −10 % на весь каталог на 7 дней
 - `/discount SOFA-001 fixed 5000` — минус 5000 ₽ на конкретный диван
 
-### Клиенты и рассылка
+### Прочее
 | Команда | Назначение |
 |---------|------------|
-| `/block <id> [причина]` | Добавить в чёрный список |
-| `/unblock <id>` | Снять блокировку |
-| `/blocked` | Чёрный список |
-| `/send <id> <текст>` | Личное сообщение |
-| `/send_all <текст>` | Массовая рассылка |
-
-### Аналитика и общие
-| Команда | Назначение |
-|---------|------------|
-| `/stats` | Сводная статистика |
-| `/dashboard` | График заказов за 7 дней |
+| `/stats`, `/dashboard` | Сводка и график продаж |
+| `/block`, `/unblock`, `/blocked` | Чёрный список |
+| `/send`, `/send_all` | Сообщения и рассылка клиентам |
 | `/log` | Журнал действий администратора |
 | `/start`, `/help` | Главное меню / справка |
 
-## Интеграция с сайтом магазина
-
-Источник данных выбирается переменной окружения **`SHOP_SOURCE`**
-(`mock` | `api` | `html`):
-
-```ini
-# .env — выбор источника:
-SHOP_SOURCE=html            # парсинг сайта без API
-SHOP_CATALOG_URL=https://shop.example.com/catalog/mebel
-SHOP_ORDERS_URL=https://shop.example.com/admin/orders
-SHOP_COOKIES=PHPSESSID=abcd1234; admin_session=xyz   # авторизация в админке
-```
-
-| Значение | Класс | Назначение |
-|----------|-------|------------|
-| `mock` (по умолчанию) | `MockShopAPI` | Генератор тестовых заказов и каталога для разработки и защиты ВКР |
-| `api` | `ShopAPIClient` | Реальный REST-клиент к API CMS магазина |
-| `html` | `HTMLShopParser` | Парсинг HTML-страниц каталога и админки без API |
-
-### Режим `api`
-
-`ShopAPIClient` ожидает REST-эндпоинт `GET /api/orders?status=new` с
-ответом вида:
-
-```json
-{
-  "orders": [
-    {
-      "id": "WEB-128",
-      "customer": {"name": "Иванов И. И.", "phone": "+7...", "telegram_id": null},
-      "address": "ул. Ленина, 15",
-      "items": [{"title": "Диван «Стокгольм»", "qty": 1}],
-      "total": 65990,
-      "status": "new",
-      "comment": ""
-    }
-  ]
-}
-```
-
-### Режим `html` (без API)
-
-`HTMLShopParser` сам скачивает HTML-страницы каталога/админки и
-извлекает данные при помощи BeautifulSoup4. Селекторы по умолчанию
-рассчитаны на типовой шаблон интернет-магазина мебели (OpenCart/Bootstrap):
-
-```python
-DEFAULT_PRODUCT_SELECTORS = {
-    "card":  ".product-card, .product-item, .product-layout",
-    "title": ".product-title, .product-name, h3, h4",
-    "price": ".product-price, .price, .price-new",
-    "sku":   "[data-sku], .product-sku",
-    "stock": ".stock, .availability",
-}
-```
-
-Селекторы можно переопределить через конструктор `HTMLShopParser`.
-Авторизация в админке — через cookies (`SHOP_COOKIES`).
-
-Команда `/parse_site` запускает разовый парсинг каталога и обновляет
-таблицу `products` (UPSERT по `sku`).
-
 ## Безопасность
 
-* Только Telegram-ID из `ADMIN_IDS` пропускаются `AdminAccessMiddleware`;
-  все попытки доступа со стороны посторонних логируются.
-* SQL-запросы выполняются параметризовано (`?`-плейсхолдеры), что
-  исключает SQL-инъекции.
-* Любое действие администратора (смена статуса, блокировка, рассылка)
-  фиксируется в журнале `admin_actions`.
-* Все секреты (`BOT_TOKEN`, `SHOP_API_TOKEN`) хранятся в `.env` и
-  исключены из git через `.gitignore`.
+* Только Telegram ID из `ADMIN_IDS` пропускаются декоратором `admin_only`.
+* Все SQL-запросы выполняются параметризовано (`?`-плейсхолдеры).
+* Любое действие администратора сохраняется в таблице `admin_actions`.
+* Все секреты (`BOT_TOKEN`, `SHOP_API_TOKEN`, `PROXY_PASSWORD`) хранятся
+  в `.env`, исключённом из git через `.gitignore`.
+* Соответствие требованиям ГОСТ Р 56939-2016 и 152-ФЗ «О персональных
+  данных»: персональные данные клиентов минимизированы, доступ к ним
+  возможен только с правами администратора, журналирование по аудит-трейлу.
 
 ## Лицензия
 

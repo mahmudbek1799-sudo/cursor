@@ -1,30 +1,31 @@
-"""Обработчики событий Telegram-бота.
+"""Регистрация всех обработчиков telebot."""
 
-Каждый модуль регистрирует свой :class:`aiogram.Router`, что позволяет
-изолировать логику и легко покрывать её модульными тестами.
-"""
+from __future__ import annotations
 
-from aiogram import Router
+from telebot import TeleBot
 
 from bot.handlers import (
     broadcast,
     common,
     discounts,
+    export,
     orders,
     products,
     stats,
-    sync_cmd,
+    sync,
     users,
 )
 
-router = Router(name="root")
-router.include_router(common.router)
-router.include_router(orders.router)
-router.include_router(products.router)
-router.include_router(discounts.router)
-router.include_router(broadcast.router)
-router.include_router(stats.router)
-router.include_router(users.router)
-router.include_router(sync_cmd.router)
 
-__all__ = ["router"]
+def register_handlers(bot: TeleBot, sync_service) -> None:
+    """Зарегистрировать все хендлеры в переданном экземпляре TeleBot."""
+
+    common.register(bot)
+    orders.register(bot)
+    products.register(bot)
+    discounts.register(bot)
+    stats.register(bot)
+    users.register(bot)
+    broadcast.register(bot)
+    sync.register(bot, sync_service)
+    export.register(bot)

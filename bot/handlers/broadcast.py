@@ -1,114 +1,127 @@
-"""Команды рассылки сообщений клиентам."""
+"""Личные сообщения и массовая рассылка клиентам."""
 
 from __future__ import annotations
 
-import asyncio
 import logging
+import time
 
-from aiogram import F, Router
-from aiogram.filters import Command, CommandObject
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message
+from telebot import TeleBot
+from telebot.types import Message
 
-from bot.database.db import get_db
+from bot.database import get_db
+from bot.utils import admin_only
 
 logger = logging.getLogger(__name__)
-router = Router(name="broadcast")
+
+_pending_broadcast: dict[int, bool] = {}
 
 
-class Broadcast(StatesGroup):
-    waiting_text = State()
-
-
-@router.message(Command("send"))
-async def cmd_send(message: Message, command: CommandObject) -> None:
-    parts = (command.args or "").strip().split(maxsplit=1)
-    if len(parts) < 2 or not parts[0].lstrip("-").isdigit():
-        await message.answer(
-            "Использование: /send &lt;telegram_id&gt; &lt;текст&gt;",
-            parse_mode="HTML",
-        )
-        return
-    user_id = int(parts[0])
-    text = parts[1]
-    db = get_db()
-    if await db.is_blocked(user_id):
-        await message.answer("Пользователь в чёрном списке — отправка запрещена.")
-        return
-    try:
-        await message.bot.send_message(user_id, f"💬 Сообщение от магазина:\n\n{text}")
-        await db.log_action(
-            admin_id=message.from_user.id,
-            action="send_personal",
-            target=str(user_id),
-            payload=text[:200],
-        )
-        await message.answer("✅ Сообщение отправлено.")
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Ошибка отправки сообщения %s: %s", user_id, exc)
-        await message.answer(f"❌ Не удалось отправить сообщение: {exc}")
-
-
-@router.message(Command("send_all"))
-async def cmd_send_all(message: Message, command: CommandObject, state: FSMContext) -> None:
-    text = (command.args or "").strip()
-    if text:
-        await _perform_broadcast(message, text)
-        return
-    await state.set_state(Broadcast.waiting_text)
-    await message.answer(
-        "✏️ Введите текст для массовой рассылки всем клиентам.\n"
-        "Команда /cancel прервёт рассылку."
-    )
-
-
-@router.message(F.text == "📣 Рассылка")
-async def kb_broadcast(message: Message, state: FSMContext) -> None:
-    await state.set_state(Broadcast.waiting_text)
-    await message.answer("✏️ Введите текст для массовой рассылки (или /cancel).")
-
-
-@router.message(Broadcast.waiting_text, Command("cancel"))
-async def broadcast_cancel(message: Message, state: FSMContext) -> None:
-    await state.clear()
-    await message.answer("Рассылка отменена.")
-
-
-@router.message(Broadcast.waiting_text)
-async def broadcast_text(message: Message, state: FSMContext) -> None:
-    await state.clear()
-    await _perform_broadcast(message, message.text or "")
-
-
-async def _perform_broadcast(message: Message, text: str) -> None:
+def _do_broadcast(bot: TeleBot, message: Message, text: str) -> None:
     if not text.strip():
-        await message.answer("Пустой текст рассылки.")
+        bot.reply_to(message, "Пустой текст рассылки.")
         return
     db = get_db()
-    ids = await db.list_client_ids()
+    ids = db.list_client_ids()
     if not ids:
-        await message.answer(
-            "Нет клиентов для рассылки. Клиенты регистрируются, когда впервые "
-            "пишут боту, или импортируются вместе с заказами с сайта."
+        bot.reply_to(
+            message,
+            "Нет клиентов для рассылки. Клиенты регистрируются, "
+            "когда впервые пишут боту, либо импортируются с заказами.",
         )
         return
-    sent, failed = 0, 0
-    status = await message.answer(f"⏳ Рассылка запущена ({len(ids)} получателей)…")
+    status = bot.send_message(
+        message.chat.id,
+        f"⏳ Рассылка запущена ({len(ids)} получателей)…",
+    )
+    sent = failed = 0
     for uid in ids:
         try:
-            await message.bot.send_message(uid, f"💬 Сообщение от магазина:\n\n{text}")
+            bot.send_message(
+                uid, f"💬 Сообщение от магазина:\n\n{text}")
             sent += 1
         except Exception as exc:  # noqa: BLE001
             failed += 1
             logger.warning("Не удалось отправить %s: %s", uid, exc)
-        await asyncio.sleep(0.05)  # Telegram rate-limit friendly
-    await db.log_action(
-        admin_id=message.from_user.id,
-        action="broadcast",
-        target=f"sent={sent},failed={failed}",
-        payload=text[:200],
+        time.sleep(0.05)
+    db.log_action(
+        admin_id=message.from_user.id, action="broadcast",
+        target=f"sent={sent},failed={failed}", payload=text[:200],
     )
-    await status.edit_text(
-        f"✅ Рассылка завершена.\nДоставлено: {sent}\nОшибки: {failed}"
-    )
+    try:
+        bot.edit_message_text(
+            f"✅ Рассылка завершена.\nДоставлено: {sent}\nОшибки: {failed}",
+            chat_id=status.chat.id, message_id=status.message_id,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def register(bot: TeleBot) -> None:
+
+    @bot.message_handler(commands=["send"])
+    @admin_only
+    def cmd_send(message: Message) -> None:
+        parts = (message.text or "").split(maxsplit=2)
+        if len(parts) < 3 or not parts[1].lstrip("-").isdigit():
+            bot.reply_to(
+                message,
+                "Использование: /send &lt;telegram_id&gt; &lt;текст&gt;",
+                parse_mode="HTML",
+            )
+            return
+        user_id = int(parts[1])
+        text = parts[2]
+        db = get_db()
+        if db.is_blocked(user_id):
+            bot.reply_to(message,
+                         "Пользователь в чёрном списке — отправка запрещена.")
+            return
+        try:
+            bot.send_message(user_id,
+                             f"💬 Сообщение от магазина:\n\n{text}")
+            db.log_action(
+                admin_id=message.from_user.id, action="send_personal",
+                target=str(user_id), payload=text[:200],
+            )
+            bot.reply_to(message, "✅ Сообщение отправлено.")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Ошибка отправки %s: %s", user_id, exc)
+            bot.reply_to(message, f"❌ Не удалось отправить: {exc}")
+
+    @bot.message_handler(commands=["send_all"])
+    @admin_only
+    def cmd_send_all(message: Message) -> None:
+        parts = (message.text or "").split(maxsplit=1)
+        if len(parts) > 1 and parts[1].strip():
+            _do_broadcast(bot, message, parts[1].strip())
+            return
+        _pending_broadcast[message.from_user.id] = True
+        bot.reply_to(
+            message,
+            "✏️ Введите текст для массовой рассылки всем клиентам.\n"
+            "Команда /cancel прервёт рассылку.",
+        )
+
+    @bot.message_handler(func=lambda m: m.text == "📣 Рассылка")
+    @admin_only
+    def kb_broadcast(message: Message) -> None:
+        _pending_broadcast[message.from_user.id] = True
+        bot.reply_to(message,
+                     "✏️ Введите текст для массовой рассылки (или /cancel).")
+
+    @bot.message_handler(
+        func=lambda m: m.from_user
+        and m.from_user.id in _pending_broadcast
+        and (m.text or "") == "/cancel")
+    @admin_only
+    def cancel(message: Message) -> None:
+        _pending_broadcast.pop(message.from_user.id, None)
+        bot.reply_to(message, "Рассылка отменена.")
+
+    @bot.message_handler(
+        func=lambda m: m.from_user
+        and m.from_user.id in _pending_broadcast)
+    @admin_only
+    def text_broadcast(message: Message) -> None:
+        _pending_broadcast.pop(message.from_user.id, None)
+        _do_broadcast(bot, message, message.text or "")

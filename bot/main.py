@@ -1,116 +1,88 @@
-"""Точка входа Telegram-бота.
+"""Точка входа Telegram-бота администратора мебельного магазина.
 
-Запускается командой ``python -m bot.main`` (или ``python bot/main.py``).
+Реализована на ``pyTelegramBotAPI`` (telebot) в синхронном режиме
+с polling. Поддерживается работа через SOCKS5-прокси для обхода
+ограничений Telegram на территории РФ. Источник данных (REST API,
+HTML-парсер или mock) выбирается переменной окружения ``SHOP_SOURCE``.
+
+Запуск:
+
+    python -m bot.main
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
+import sys
 
-from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
+import telebot
+from telebot import TeleBot, apihelper
 
 from bot.config import settings
-from bot.database.db import get_db
-from bot.handlers import router as root_router
-from bot.middlewares import AdminAccessMiddleware
-from bot.services.shop_api import (
-    BaseShopAPI,
-    HTMLShopParser,
-    MockShopAPI,
-    ShopAPIClient,
-)
-from bot.services.sync import OrderSyncService
-from bot.utils.logging_setup import setup_logging
+from bot.database import get_db
+from bot.handlers import register_handlers
+from bot.services import OrderSyncService, build_shop_source
+from bot.utils import setup_logging
 
 logger = logging.getLogger(__name__)
 
 
-def build_shop_source() -> BaseShopAPI:
-    """Выбрать источник данных по значению ``SHOP_SOURCE`` в .env.
+def _apply_proxy() -> None:
+    """Настроить SOCKS5-прокси для telebot, если задан в .env.
 
-    Возможные значения:
-    * ``mock`` (по умолчанию) — генератор тестовых заказов;
-    * ``api``  — реальный REST-клиент (``SHOP_API_URL`` + ``SHOP_API_TOKEN``);
-    * ``html`` — парсинг HTML-страниц без API
-                (``SHOP_CATALOG_URL`` и опц. ``SHOP_ORDERS_URL``).
+    В условиях периодических ограничений работы Telegram на территории
+    РФ это обеспечивает непрерывность администрирования.
     """
 
-    source = settings.shop_source.lower()
-    if source == "api":
-        logger.info("Источник данных: REST API (%s)", settings.shop_api_url)
-        return ShopAPIClient(settings.shop_api_url, settings.shop_api_token)
-    if source == "html":
-        logger.info(
-            "Источник данных: HTML-парсинг (caталог=%s, заказы=%s)",
-            settings.shop_catalog_url or "—",
-            settings.shop_orders_url or "—",
-        )
-        return HTMLShopParser(
-            catalog_url=settings.shop_catalog_url,
-            orders_url=settings.shop_orders_url or None,
-            cookies=settings.parsed_cookies(),
-        )
-    logger.info("Источник данных: MockShopAPI (демо-режим)")
-    return MockShopAPI()
+    proxy_url = settings.proxy_url()
+    if not proxy_url:
+        return
+    apihelper.proxy = {"http": proxy_url, "https": proxy_url}
+    logger.info("Telegram-клиент настроен через прокси: %s",
+                proxy_url.split("@")[-1])
 
 
-async def on_startup(bot: Bot, sync_service: OrderSyncService) -> None:
-    me = await bot.get_me()
-    logger.info("Бот @%s запущен (id=%s)", me.username, me.id)
-    logger.info("Администраторы: %s", settings.admin_ids)
-    await sync_service.start()
-
-
-async def on_shutdown(bot: Bot, sync_service: OrderSyncService) -> None:
-    logger.info("Остановка бота…")
-    await sync_service.stop()
-    await bot.session.close()
-
-
-async def main() -> None:
+def main() -> int:
     setup_logging(settings.log_level)
-    logger.info("Запуск приложения «Бот администратора мебельного магазина»")
+    logger.info("Запуск Telegram-бота администратора мебельного магазина")
 
+    if not settings.bot_token:
+        logger.error("BOT_TOKEN не задан. Запуск невозможен.")
+        return 1
     if not settings.admin_ids:
         logger.warning(
-            "Список ADMIN_IDS пуст — никто не сможет пользоваться ботом. "
+            "ADMIN_IDS пуст — никто не сможет пользоваться ботом. "
             "Заполните переменную окружения ADMIN_IDS."
         )
 
     db = get_db()
-    await db.init_schema()
+    db.init_schema()
 
-    bot = Bot(
-        token=settings.bot_token,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
+    _apply_proxy()
+    bot = TeleBot(settings.bot_token, parse_mode="HTML", threaded=True)
 
     shop_api = build_shop_source()
     sync_service = OrderSyncService(bot=bot, db=db, api=shop_api)
 
-    dp = Dispatcher(storage=MemoryStorage())
-    dp["sync_service"] = sync_service
-    dp.update.outer_middleware(AdminAccessMiddleware())
-    dp.include_router(root_router)
-    dp.startup.register(on_startup)
-    dp.shutdown.register(on_shutdown)
+    register_handlers(bot, sync_service)
 
     try:
-        await dp.start_polling(
-            bot,
-            sync_service=sync_service,
-            allowed_updates=dp.resolve_used_update_types(),
-        )
+        me = bot.get_me()
+        logger.info("Бот @%s запущен (id=%s)", me.username, me.id)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Не удалось получить информацию о боте: %s", exc)
+        return 1
+
+    sync_service.start()
+    try:
+        bot.infinity_polling(timeout=20, long_polling_timeout=30,
+                             skip_pending=False)
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Завершение по сигналу.")
     finally:
-        await sync_service.stop()
+        sync_service.stop()
+    return 0
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Завершение работы по сигналу.")
+    sys.exit(main())

@@ -1,16 +1,17 @@
-"""Статистика и аналитические дашборды."""
+"""Команды статистики и аналитического дашборда."""
 
 from __future__ import annotations
 
-from aiogram import F, Router
-from aiogram.filters import Command
-from aiogram.types import BufferedInputFile, Message
+import logging
 
-from bot.database.db import get_db
+from telebot import TeleBot
+from telebot.types import Message
+
+from bot.database import get_db
 from bot.services.analytics import build_orders_chart
-from bot.utils.formatting import format_money
+from bot.utils import admin_only, format_money
 
-router = Router(name="stats")
+logger = logging.getLogger(__name__)
 
 
 def _format_stats(data: dict) -> str:
@@ -28,23 +29,34 @@ def _format_stats(data: dict) -> str:
     )
 
 
-@router.message(Command("stats"))
-@router.message(F.text == "📊 Статистика")
-async def cmd_stats(message: Message) -> None:
-    db = get_db()
-    data = await db.stats_summary()
-    await message.answer(_format_stats(data), parse_mode="HTML")
+def register(bot: TeleBot) -> None:
 
+    @bot.message_handler(commands=["stats"])
+    @admin_only
+    def cmd_stats(message: Message) -> None:
+        db = get_db()
+        bot.send_message(message.chat.id,
+                         _format_stats(db.stats_summary()),
+                         parse_mode="HTML")
 
-@router.message(Command("dashboard"))
-@router.message(F.text == "📈 Дашборд")
-async def cmd_dashboard(message: Message) -> None:
-    db = get_db()
-    points = await db.orders_per_day(days=7)
-    image = build_orders_chart(points)
-    data = await db.stats_summary()
-    await message.answer_photo(
-        BufferedInputFile(image, filename="orders_dashboard.png"),
-        caption=_format_stats(data),
-        parse_mode="HTML",
-    )
+    @bot.message_handler(func=lambda m: m.text == "📊 Статистика")
+    @admin_only
+    def kb_stats(message: Message) -> None:
+        cmd_stats(message)
+
+    @bot.message_handler(commands=["dashboard"])
+    @admin_only
+    def cmd_dashboard(message: Message) -> None:
+        db = get_db()
+        points = db.orders_per_day(days=7)
+        image = build_orders_chart(points)
+        bot.send_photo(
+            message.chat.id, photo=image,
+            caption=_format_stats(db.stats_summary()),
+            parse_mode="HTML",
+        )
+
+    @bot.message_handler(func=lambda m: m.text == "📈 Дашборд")
+    @admin_only
+    def kb_dashboard(message: Message) -> None:
+        cmd_dashboard(message)

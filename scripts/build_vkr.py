@@ -1158,31 +1158,124 @@ def build_references(doc) -> None:
 # ---------------------------------------------------------------------------
 # Приложение А (только ключевые фрагменты)
 # ---------------------------------------------------------------------------
+def _extract_fragment(path: Path, qualified_name: str) -> str:
+    """Вырезать из исходного файла объявление класса или функции/метода.
+
+    Поддерживается имя ``ClassName`` (для класса целиком),
+    ``ClassName.method`` (для одного метода) и ``function_name``
+    (для модульной функции). Возвращает исходный текст без
+    изменений (с сохранением комментариев).
+    """
+
+    import ast
+
+    source = path.read_text(encoding="utf-8")
+    lines = source.splitlines()
+    tree = ast.parse(source)
+
+    parts = qualified_name.split(".")
+
+    def _find(node, names: list[str]):
+        if not names:
+            return None
+        target = names[0]
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                  ast.ClassDef)):
+                if child.name == target:
+                    if len(names) == 1:
+                        return child
+                    return _find(child, names[1:])
+        return None
+
+    node = _find(tree, parts)
+    if node is None:
+        raise ValueError(f"Не найдено: {qualified_name} в {path}")
+
+    start = node.lineno - 1
+    if node.decorator_list:
+        start = node.decorator_list[0].lineno - 1
+    end = getattr(node, "end_lineno", start + 1)
+    snippet = "\n".join(lines[start:end])
+    return snippet
+
+
 def build_appendix_a(doc) -> None:
     add_heading1(doc, "Приложение А. Листинг ключевых модулей программы")
     add_para(
         doc,
         f"По замечанию руководителя в Приложении А оставлены только "
-        f"ключевые фрагменты кода: модуль конфигурации (config.py), "
-        f"точка входа (main.py), слой базы данных (database.py) и "
-        f"обработчик заказов (handlers/orders.py). Полный исходный код "
-        f"проекта, включая все остальные модули, тесты и "
-        f"инфраструктурные скрипты, доступен в репозитории Git по "
-        f"адресу {GIT_URL} либо предоставлен на электронном носителе "
-        f"вместе с пояснительной запиской.",
+        f"ключевые фрагменты исходного кода. Полная версия проекта со "
+        f"всеми остальными модулями, тестами и инфраструктурными "
+        f"скриптами доступна в репозитории Git по адресу {GIT_URL} "
+        f"либо на электронном носителе вместе с пояснительной "
+        f"запиской.",
         italic=True,
     )
 
-    listings = {
-        "А.1 Файл config.py": ROOT / "bot" / "config.py",
-        "А.2 Файл main.py": ROOT / "bot" / "main.py",
-        "А.3 Файл database.py": ROOT / "bot" / "database.py",
-        "А.4 Файл handlers/orders.py": ROOT / "bot" / "handlers" / "orders.py",
-    }
-    for title, path in listings.items():
+    fragments = [
+        (
+            "А.1 Файл config.py - класс Settings (включая метод proxy_url)",
+            ROOT / "bot" / "config.py",
+            "Settings",
+            "Здесь собрана конфигурация бота, читаемая из файла .env. "
+            "Метод proxy_url() формирует URL SOCKS5-прокси для работы "
+            "при ограничениях Telegram на территории РФ.",
+        ),
+        (
+            "А.2 Файл database.py - метод init_schema",
+            ROOT / "bot" / "database.py",
+            "Database.init_schema",
+            "Метод создаёт схему БД из шести таблиц при первом запуске "
+            "и выполняет безопасные ALTER-миграции для совместимости "
+            "со старыми установками.",
+        ),
+        (
+            "А.3 Файл database.py - метод upsert_order",
+            ROOT / "bot" / "database.py",
+            "Database.upsert_order",
+            "Метод создаёт или обновляет заказ по внешнему "
+            "идентификатору. Идемпотентен: повторный вызов на одних "
+            "и тех же данных не приведёт к дубликату.",
+        ),
+        (
+            "А.4 Файл database.py - функция apply_discount",
+            ROOT / "bot" / "database.py",
+            "apply_discount",
+            "Функция применяет скидку к цене (процентную или "
+            "фиксированную). Никогда не возвращает отрицательное "
+            "значение - если фиксированная скидка больше цены, "
+            "возвращается 0.",
+        ),
+        (
+            "А.5 Файл services/shop_api.py - метод parse_products_html",
+            ROOT / "bot" / "services" / "shop_api.py",
+            "HTMLShopParser.parse_products_html",
+            "Чистая функция парсинга каталога мебельного магазина без "
+            "API. Использует BeautifulSoup4 и работает по настраиваемым "
+            "CSS-селекторам.",
+        ),
+        (
+            "А.6 Файл services/shop_api.py - метод parse_orders_html",
+            ROOT / "bot" / "services" / "shop_api.py",
+            "HTMLShopParser.parse_orders_html",
+            "Чистая функция парсинга страницы списка заказов в админке "
+            "сайта. Так же, как и предыдущая, основана на BeautifulSoup4.",
+        ),
+        (
+            "А.7 Файл services/analytics.py - функция build_orders_chart",
+            ROOT / "bot" / "services" / "analytics.py",
+            "build_orders_chart",
+            "Генерация PNG-графика «Динамика заказов» средствами "
+            "Matplotlib (backend Agg, без GUI).",
+        ),
+    ]
+
+    for title, path, qualified_name, description in fragments:
         add_heading2(doc, title)
-        text = path.read_text(encoding="utf-8")
-        _add_code_block(doc, text)
+        add_para(doc, description, italic=True)
+        snippet = _extract_fragment(path, qualified_name)
+        _add_code_block(doc, snippet)
         _add_page_break(doc)
 
 

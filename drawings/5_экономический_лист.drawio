@@ -1,0 +1,223 @@
+<mxfile host="app.diagrams.net" modified="2026-05-31T20:28:00.000Z" agent="Cursor Cloud" version="24.0.0" type="device">
+  <diagram id="5_Экономический_лист" name="5 Экономический лист">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1682" pageHeight="1188" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" value="СВОДНАЯ ТАБЛИЦА ТЕХНИКО-ЭКОНОМИЧЕСКИХ ПОКАЗАТЕЛЕЙ" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=center;fontFamily=Times New Roman;fontSize=21;fontColor=#000000;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="20" width="1000" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="3" value="Показатель" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e6f0ff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="100" width="360" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="4" value="Значение" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e6f0ff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="100" width="220" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="5" value="Переработка молока" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="138" width="360" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="6" value="15 000,0 т/год" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="138" width="220" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="7" value="Выпуск масла" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="176" width="360" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="8" value="844,2 т/год" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="176" width="220" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="9" value="Выпуск продуктов из пахты" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="214" width="360" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="10" value="777,1 т/год" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="214" width="220" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="11" value="Реализация обезжиренного молока" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="252" width="360" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="12" value="13 377,2 т/год" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="252" width="220" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="13" value="Стоимость молока" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="290" width="360" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="14" value="330,00 млн руб./год" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="290" width="220" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="15" value="Годовая выручка" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="328" width="360" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="16" value="690,55 млн руб." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="328" width="220" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="17" value="Годовая себестоимость" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="366" width="360" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="18" value="541,00 млн руб." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="366" width="220" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="19" value="Прибыль до налогообложения" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="404" width="360" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="20" value="149,55 млн руб." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="404" width="220" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="21" value="Чистая прибыль" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="442" width="360" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="22" value="119,64 млн руб." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="442" width="220" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="23" value="Капитальные вложения" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="480" width="360" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="24" value="495,00 млн руб." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="480" width="220" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="25" value="Срок окупаемости" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="518" width="360" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="26" value="3,18 года" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="518" width="220" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="27" value="Годовой выпуск продукции, т" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=center;fontFamily=Times New Roman;fontSize=16;fontColor=#000000;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="720" y="100" width="440" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="28" value="Масло крестьянское" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=right;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="690" y="155" width="230" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="29" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#666666;fontFamily=Times New Roman;fontSize=16;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="940" y="155" width="360.0" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="30" value="576,3" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=left;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="155" width="80" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="31" value="Масло десертное с кофе" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=right;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="690" y="225" width="230" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="32" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#666666;fontFamily=Times New Roman;fontSize=16;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="940" y="225" width="167.30769230769232" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="33" value="267,9" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=left;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="225" width="80" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="34" value="Пахта пастеризованная" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=right;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="690" y="295" width="230" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="35" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#666666;fontFamily=Times New Roman;fontSize=16;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="940" y="295" width="234.57270845338215" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="36" value="375,5" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=left;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="295" width="80" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="37" value="Кисломолочный напиток" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=right;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="690" y="365" width="230" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="38" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#666666;fontFamily=Times New Roman;fontSize=16;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="940" y="365" width="152.70683320315177" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="39" value="244,5" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=left;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="365" width="80" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="40" value="Напиток с ванилью" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=right;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="690" y="435" width="230" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="41" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#666666;fontFamily=Times New Roman;fontSize=16;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="940" y="435" width="98.12645540021886" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="42" value="157,1" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=left;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="435" width="80" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="43" value="Структура себестоимости, млн руб." style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=center;fontFamily=Times New Roman;fontSize=16;fontColor=#000000;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="720" y="555" width="440" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="44" value="молоко&lt;br&gt;330" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#666666;fontFamily=Times New Roman;fontSize=11;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="720" y="610" width="372.0887245841035" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="45" value="материалы&lt;br&gt;24" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#666666;fontFamily=Times New Roman;fontSize=11;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1092.0887245841036" y="610" width="27.060998151571162" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="46" value="упаковка&lt;br&gt;36" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#666666;fontFamily=Times New Roman;fontSize=11;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1119.1497227356747" y="610" width="40.59149722735675" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="47" value="энергия&lt;br&gt;24" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#666666;fontFamily=Times New Roman;fontSize=11;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1159.7412199630314" y="610" width="27.060998151571162" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="48" value="труд&lt;br&gt;52" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#666666;fontFamily=Times New Roman;fontSize=11;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1186.8022181146025" y="610" width="58.63216266173752" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="49" value="прочие&lt;br&gt;75" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontFamily=Times New Roman;fontSize=11;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1245.43438077634" y="610" width="84.5656192236599" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="50" value="Ключевой расчет: 15 000 т молока × 0,022 млн руб./т = 330 млн руб./год." style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=left;fontFamily=Times New Roman;fontSize=13;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="720" y="710" width="650" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="51" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontFamily=Times New Roman;fontSize=16;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="1010" width="590" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="52" value="" style="endArrow=none;html=1;rounded=0;strokeColor=#000000;strokeWidth=1;dashed=0;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1040" y="1045" as="sourcePoint" />
+            <mxPoint x="1630" y="1045" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="53" value="" style="endArrow=none;html=1;rounded=0;strokeColor=#000000;strokeWidth=1;dashed=0;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1040" y="1080" as="sourcePoint" />
+            <mxPoint x="1630" y="1080" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="54" value="" style="endArrow=none;html=1;rounded=0;strokeColor=#000000;strokeWidth=1;dashed=0;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1130" y="1010" as="sourcePoint" />
+            <mxPoint x="1130" y="1145" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="55" value="" style="endArrow=none;html=1;rounded=0;strokeColor=#000000;strokeWidth=1;dashed=0;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1250" y="1010" as="sourcePoint" />
+            <mxPoint x="1250" y="1145" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="56" value="" style="endArrow=none;html=1;rounded=0;strokeColor=#000000;strokeWidth=1;dashed=0;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1420" y="1010" as="sourcePoint" />
+            <mxPoint x="1420" y="1145" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="57" value="Изм. Лист № докум. Подп. Дата" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=left;fontFamily=Times New Roman;fontSize=11;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="1045" y="1015" width="200" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="58" value="ВКР.19.03.03.02.3625.ТХ" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=center;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1255" y="1015" width="160" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="59" value="Лист" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=center;fontFamily=Times New Roman;fontSize=11;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="1430" y="1015" width="55" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="60" value="5" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=center;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1490" y="1015" width="30" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="61" value="Листов" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=center;fontFamily=Times New Roman;fontSize=11;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="1525" y="1015" width="55" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="62" value="5" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=center;fontFamily=Times New Roman;fontSize=12;fontColor=#000000;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1585" y="1015" width="30" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="63" value="Разраб. Худойкулзода Ш.М." style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=left;fontFamily=Times New Roman;fontSize=11;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="1045" y="1052" width="190" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="64" value="Пров. Куренкова Л.А." style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=left;fontFamily=Times New Roman;fontSize=11;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="1045" y="1082" width="190" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="65" value="Н.контр. __________" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=left;fontFamily=Times New Roman;fontSize=11;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="1045" y="1110" width="190" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="66" value="Сводная таблица технико-&lt;br&gt;экономических показателей" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=center;fontFamily=Times New Roman;fontSize=14;fontColor=#000000;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1255" y="1055" width="160" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="67" value="ФГБОУ ВО Вологодская ГМХА&lt;br&gt;Технологический факультет&lt;br&gt;Кафедра технологии молока&lt;br&gt;и молочных продуктов" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;verticalAlign=middle;align=center;fontFamily=Times New Roman;fontSize=11;fontColor=#000000;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="1425" y="1052" width="190" height="84" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
